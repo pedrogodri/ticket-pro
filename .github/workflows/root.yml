@@ -22,6 +22,18 @@ jobs:
       - run: npm run validate
       - run: npm run typecheck
 
+  shared-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: Test the sync script
+        run: scripts/tests/sync-shared.test.sh
+      - name: Vendored copies match their sources (ADR-0017)
+        run: scripts/sync-shared.sh --check
+
   compose:
     runs-on: ubuntu-latest
     steps:
