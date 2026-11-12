@@ -85,9 +85,11 @@ for entry in $SUBSCRIPTIONS; do
     sub_arn=$(awsl sns list-subscriptions-by-topic --topic-arn "$topic_arn" 2>/dev/null \
       | jq -r --arg e "$queue_arn" '.Subscriptions[] | select(.Endpoint == $e) | .SubscriptionArn' | head -1)
     if [ -z "$sub_arn" ]; then fail "subscription $topic -> $q missing"; continue; fi
-    got=$(awsl sns get-subscription-attributes --subscription-arn "$sub_arn" \
-      | jq -r '.Attributes.FilterPolicy // "{}" | fromjson | .type // [] | sort | join(",")')
+    sub_attrs=$(awsl sns get-subscription-attributes --subscription-arn "$sub_arn" | jq '.Attributes')
+    got=$(echo "$sub_attrs" | jq -r '.FilterPolicy // "{}" | fromjson | .type // [] | sort | join(",")')
     [ "$got" = "$want" ] && pass "filter $topic -> $q [$want]" || fail "filter $topic -> $q: want [$want] got [$got]"
+    raw=$(echo "$sub_attrs" | jq -r '.RawMessageDelivery // "false"')
+    [ "$raw" = "true" ] && pass "raw delivery $topic -> $q" || fail "raw delivery $topic -> $q is $raw (spike S3: enabled)"
   done
 done
 

@@ -7,7 +7,7 @@ AWS_CLI_IMAGE="${AWS_CLI_IMAGE:-amazon/aws-cli:2.39.7}"
 INGRESSOJA_NETWORK="${INGRESSOJA_NETWORK:-ingressoja-backend}"
 
 awsl() {
-  docker run --rm -i \
+  docker run --rm \
     --network "$INGRESSOJA_NETWORK" \
     -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}" \
     -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}" \

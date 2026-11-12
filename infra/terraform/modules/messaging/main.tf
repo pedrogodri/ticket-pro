@@ -63,4 +63,8 @@ resource "aws_sns_topic_subscription" "this" {
   protocol      = "sqs"
   endpoint      = aws_sqs_queue.this[each.value.service].arn
   filter_policy = jsonencode({ type = each.value.types })
+
+  # Envelope delivered as-is with SNS message attributes mapped to SQS attributes
+  # (verified in docs/spikes/2026-11-12-ministack.md, S3).
+  raw_message_delivery = true
 }
