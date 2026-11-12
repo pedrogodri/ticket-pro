@@ -4,7 +4,7 @@ Perfil do usuário e read model "meus ingressos" do Ticket Pro, em C# com .NET 1
 
 **Dona:** Yasmin.
 
-**Estado:** esqueleto. Hoje só tem config validada, logs JSON e health checks. O banco e a plataforma de mensageria chegam na F1, e o domínio na F2.
+**Estado:** plataforma pronta (F1): banco com migrations Flyway, outbox + relay (`Platform/`, vendorizado de `shared/dotnet`) e readiness com `db`/`broker`. O domínio chega na F2.
 
 ## Responsabilidades
 
@@ -48,6 +48,12 @@ O banco é `users`, no container `users-db`. Tabelas: `profiles` (`user_id PK`),
 | `SERVICE_NAME` | sim | `user-service` |
 | `PORT` | sim | `8080` |
 | `LOG_LEVEL` | sim | `debug` \| `info` \| `warn` \| `error` |
+| `DATABASE_URL` | sim | `postgres://users_app:…@users-db:5432/users` (API, RLS) |
+| `DATABASE_WORKER_URL` | sim | role `users_worker` (relay, consumidores) |
+| `USERS_TOPIC_ARN` | sim | `arn:aws:sns:us-east-1:000000000000:ticketpro-users` |
+| `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_MAX_BACKOFF_MS`, `OUTBOX_CLAIM_LEASE_MS`, `HTTP_CLIENT_TIMEOUT_MS` | não | 200, 50, 30000, 30000, 3000 (RFC 0003 §5.1) |
+
+O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, só desenvolvimento). `src/UserService/Platform/` e `contracts/` são cópias geradas por `scripts/sync-shared.sh`: não edite.
 
 ## Comandos
 
