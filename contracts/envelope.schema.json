@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ingressoja.local/contracts/envelope.schema.json",
+  "title": "Envelope de mensagem",
+  "description": "Envelope único de toda mensagem assíncrona (RFC 0001 §5.1).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "messageId",
+    "correlationId",
+    "type",
+    "version",
+    "occurredAt",
+    "payload"
+  ],
+  "properties": {
+    "messageId": {
+      "$ref": "common.schema.json#/$defs/uuid",
+      "description": "Gerado no insert do outbox; chave de idempotência."
+    },
+    "correlationId": {
+      "$ref": "common.schema.json#/$defs/uuid",
+      "description": "Propagado de ponta a ponta no fluxo."
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9]+$"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "occurredAt": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

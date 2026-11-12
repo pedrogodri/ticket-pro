@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ingressoja.local/contracts/events/OrderCreated/v1.schema.json",
+  "title": "OrderCreated v1",
+  "description": "Pedido aceito (202) e pendente; inicia a saga pedindo reserva ao inventory.",
+  "x-topic": "ingressoja-orders",
+  "x-producer": "order-service",
+  "x-consumers": [
+    "inventory-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "OrderCreated"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "userId",
+        "eventId",
+        "sectorId",
+        "quantity"
+      ],
+      "properties": {
+        "orderId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "userId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "eventId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "sectorId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "quantity": {
+          "$ref": "../../common.schema.json#/$defs/quantity"
+        }
+      }
+    }
+  }
+}

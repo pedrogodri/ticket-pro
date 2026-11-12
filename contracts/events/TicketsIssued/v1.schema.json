@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ingressoja.local/contracts/events/TicketsIssued/v1.schema.json",
+  "title": "TicketsIssued v1",
+  "description": "Ingressos emitidos (um código por unidade); alimenta 'meus ingressos' (CQRS) e o comprovante no S3.",
+  "x-topic": "ingressoja-inventory",
+  "x-producer": "inventory-service",
+  "x-consumers": [
+    "user-service",
+    "notification-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "TicketsIssued"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "userId",
+        "eventId",
+        "eventName",
+        "eventStartsAt",
+        "sectorId",
+        "sectorName",
+        "tickets"
+      ],
+      "properties": {
+        "orderId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "userId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "eventId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "eventName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "eventStartsAt": {
+          "$ref": "../../common.schema.json#/$defs/timestamp"
+        },
+        "sectorId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "sectorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "tickets": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ticketId",
+              "code"
+            ],
+            "properties": {
+              "ticketId": {
+                "$ref": "../../common.schema.json#/$defs/uuid"
+              },
+              "code": {
+                "type": "string",
+                "pattern": "^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

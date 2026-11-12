@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ingressoja.local/contracts/events/OrderCancelled/v1.schema.json",
+  "title": "OrderCancelled v1",
+  "description": "Pedido cancelado; o inventory libera a reserva (compensação) e o notification registra a falha.",
+  "x-topic": "ingressoja-orders",
+  "x-producer": "order-service",
+  "x-consumers": [
+    "inventory-service",
+    "notification-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "OrderCancelled"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "userId",
+        "reason",
+        "cancelledAt"
+      ],
+      "properties": {
+        "orderId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "userId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "OUT_OF_STOCK",
+            "PAYMENT_FAILED",
+            "PAYMENT_TIMEOUT",
+            "RESERVATION_EXPIRED"
+          ]
+        },
+        "cancelledAt": {
+          "$ref": "../../common.schema.json#/$defs/timestamp"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ingressoja.local/contracts/events/UserCreationFailed/v1.schema.json",
+  "title": "UserCreationFailed v1",
+  "description": "Perfil não pôde ser criado; o auth-service compensa removendo a credencial.",
+  "x-topic": "ingressoja-users",
+  "x-producer": "user-service",
+  "x-consumers": [
+    "auth-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "UserCreationFailed"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userId",
+        "reason"
+      ],
+      "properties": {
+        "userId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "INVALID_PROFILE_DATA",
+            "DUPLICATE_PROFILE",
+            "INTERNAL_ERROR"
+          ]
+        }
+      }
+    }
+  }
+}

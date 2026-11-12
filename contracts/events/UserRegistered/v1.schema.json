@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ingressoja.local/contracts/events/UserRegistered/v1.schema.json",
+  "title": "UserRegistered v1",
+  "description": "Credencial criada no auth-service; o user-service cria o perfil.",
+  "x-topic": "ingressoja-auth",
+  "x-producer": "auth-service",
+  "x-consumers": [
+    "user-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "UserRegistered"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userId",
+        "email",
+        "name"
+      ],
+      "properties": {
+        "userId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "email": {
+          "$ref": "../../common.schema.json#/$defs/email"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        }
+      }
+    }
+  }
+}
