@@ -1,4 +1,4 @@
-# Agent Instructions — IngressoJá
+# Agent Instructions — Ticket Pro
 
 Sistema distribuído acadêmico (FURB). Só backend. Respostas em PT-BR; código, identificadores, commits e branches em inglês.
 

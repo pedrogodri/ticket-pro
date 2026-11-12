@@ -1,9 +1,9 @@
 {
-  "name": "@ingressoja/order-service",
+  "name": "@ticketpro/order-service",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "IngressoJá order-service: async order API and purchase saga orchestrator.",
+  "description": "Ticket Pro order-service: async order API and purchase saga orchestrator.",
   "engines": {
     "node": ">=22.12"
   },

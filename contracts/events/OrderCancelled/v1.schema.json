@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/OrderCancelled/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/OrderCancelled/v1.schema.json",
   "title": "OrderCancelled v1",
   "description": "Pedido cancelado; o inventory libera a reserva (compensação) e o notification registra a falha.",
-  "x-topic": "ingressoja-orders",
+  "x-topic": "ticketpro-orders",
   "x-producer": "order-service",
   "x-consumers": [
     "inventory-service",

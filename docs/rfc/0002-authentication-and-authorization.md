@@ -51,8 +51,8 @@ Validação de senha: no mínimo 8 caracteres, máximo 128, sem outras regras de
 ```json
 { "alg": "RS256", "typ": "JWT", "kid": "2026-11-12-01" }
 {
-  "iss": "ingressoja-auth",
-  "aud": "ingressoja-api",
+  "iss": "ticketpro-auth",
+  "aud": "ticketpro-api",
   "sub": "<userId>",
   "jti": "<uuid>",
   "iat": 1763971812,
@@ -69,7 +69,7 @@ Opaco, com 256 bits aleatórios em base64url. É guardado **só como hash SHA-25
 
 ### 5.4 Chaves e JWKS
 
-- O Secrets Manager guarda `ingressoja/auth/jwt-signing-key` = `{ "current": {kid, privatePem}, "previous": {kid, publicPem} | null }`, criado pelo Terraform (`tls_private_key`, RSA 2048).
+- O Secrets Manager guarda `ticketpro/auth/jwt-signing-key` = `{ "current": {kid, privatePem}, "previous": {kid, publicPem} | null }`, criado pelo Terraform (`tls_private_key`, RSA 2048).
 - O auth lê no boot e, a cada `JWT_KEY_REFRESH_S`, assina com `current` e publica `current` + `previous` no JWKS.
 - Rotação (manual nesta entrega): atualizar o segredo movendo `current` → `previous`. Tokens antigos continuam válidos até expirar.
 

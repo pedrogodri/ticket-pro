@@ -1,3 +1,3 @@
-module github.com/ingressoja/gateway
+module github.com/ticketpro/gateway
 
 go 1.25

@@ -18,7 +18,7 @@ O auth mantém a blacklist de `jti` no seu Redis (logout, compensação de cadas
 
 ## Decisão
 
-O auth grava o `jti` na sua blacklist e publica **`TokenRevoked { jti, userId, expiresAt, reason }`** via outbox. O gateway consome da fila `ingressoja-gateway` e grava `revoked:{jti}` no **Redis do gateway** (o mesmo do rate limit) com TTL = `expiresAt - now`. Em toda requisição autenticada, o gateway faz `EXISTS revoked:{jti}`.
+O auth grava o `jti` na sua blacklist e publica **`TokenRevoked { jti, userId, expiresAt, reason }`** via outbox. O gateway consome da fila `ticketpro-gateway` e grava `revoked:{jti}` no **Redis do gateway** (o mesmo do rate limit) com TTL = `expiresAt - now`. Em toda requisição autenticada, o gateway faz `EXISTS revoked:{jti}`.
 
 Se o Redis do gateway estiver fora, a checagem de revogação é **fail-open com log de alerta**, e o rate limit também é fail-open. A justificativa é que a exposição máxima é o TTL de 15 min do access token e que fail-closed derrubaria todo o sistema por falha de cache.
 

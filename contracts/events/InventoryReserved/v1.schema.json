@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/InventoryReserved/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/InventoryReserved/v1.schema.json",
   "title": "InventoryReserved v1",
   "description": "Estoque reservado até expiresAt; informa o preço (fonte da verdade é o inventory).",
-  "x-topic": "ingressoja-inventory",
+  "x-topic": "ticketpro-inventory",
   "x-producer": "inventory-service",
   "x-consumers": [
     "order-service"

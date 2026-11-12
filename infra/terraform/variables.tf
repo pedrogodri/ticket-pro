@@ -31,21 +31,21 @@ variable "topic_by_type" {
   description = "Event type -> SNS topic (docs/arquitetura.md §7)."
   type        = map(string)
   default = {
-    UserRegistered              = "ingressoja-auth"
-    TokenRevoked                = "ingressoja-auth"
-    UserCreationFailed          = "ingressoja-users"
-    OrderCreated                = "ingressoja-orders"
-    PaymentRequested            = "ingressoja-orders"
-    OrderConfirmed              = "ingressoja-orders"
-    OrderCancelled              = "ingressoja-orders"
-    RefundRequested             = "ingressoja-orders"
-    InventoryReserved           = "ingressoja-inventory"
-    InventoryRejected           = "ingressoja-inventory"
-    InventoryReservationExpired = "ingressoja-inventory"
-    TicketsIssued               = "ingressoja-inventory"
-    PaymentApproved             = "ingressoja-payments"
-    PaymentFailed               = "ingressoja-payments"
-    PaymentRefunded             = "ingressoja-payments"
+    UserRegistered              = "ticketpro-auth"
+    TokenRevoked                = "ticketpro-auth"
+    UserCreationFailed          = "ticketpro-users"
+    OrderCreated                = "ticketpro-orders"
+    PaymentRequested            = "ticketpro-orders"
+    OrderConfirmed              = "ticketpro-orders"
+    OrderCancelled              = "ticketpro-orders"
+    RefundRequested             = "ticketpro-orders"
+    InventoryReserved           = "ticketpro-inventory"
+    InventoryRejected           = "ticketpro-inventory"
+    InventoryReservationExpired = "ticketpro-inventory"
+    TicketsIssued               = "ticketpro-inventory"
+    PaymentApproved             = "ticketpro-payments"
+    PaymentFailed               = "ticketpro-payments"
+    PaymentRefunded             = "ticketpro-payments"
   }
 }
 
@@ -65,12 +65,12 @@ variable "subscriptions" {
 
 variable "receipts_bucket" {
   type    = string
-  default = "ingressoja-receipts"
+  default = "ticketpro-receipts"
 }
 
 variable "jwt_secret_id" {
   type    = string
-  default = "ingressoja/auth/jwt-signing-key"
+  default = "ticketpro/auth/jwt-signing-key"
 }
 
 variable "jwt_key_id" {

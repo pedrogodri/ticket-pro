@@ -1,9 +1,9 @@
 # Catálogo AsyncAPI. Mantenha em sincronia com contracts/events/** no mesmo PR (RFC 0001 §7).
 asyncapi: "3.1.0"
 info:
-  title: "IngressoJá — eventos de domínio"
+  title: "Ticket Pro — eventos de domínio"
   version: "1.0.0"
-  description: "Catálogo de eventos do IngressoJá. Cada tópico SNS é um canal; cada serviço consumidor tem uma fila SQS própria (ingressoja-<serviço>) com DLQ, assinada por filter policy no atributo type. Fonte da verdade dos payloads: contracts/events/<Type>/v<N>.schema.json (RFC 0001)."
+  description: "Catálogo de eventos do Ticket Pro. Cada tópico SNS é um canal; cada serviço consumidor tem uma fila SQS própria (ticketpro-<serviço>) com DLQ, assinada por filter policy no atributo type. Fonte da verdade dos payloads: contracts/events/<Type>/v<N>.schema.json (RFC 0001)."
 defaultContentType: application/json
 servers:
   ministack:
@@ -11,23 +11,23 @@ servers:
     protocol: sns
     description: "MiniStack (AWS emulada). Endpoint configurado por AWS_ENDPOINT_URL."
 channels:
-  ingressoja-auth:
-    address: ingressoja-auth
-    description: "Tópico SNS ingressoja-auth."
+  ticketpro-auth:
+    address: ticketpro-auth
+    description: "Tópico SNS ticketpro-auth."
     messages:
       UserRegisteredV1:
         "$ref": "#/components/messages/UserRegisteredV1"
       TokenRevokedV1:
         "$ref": "#/components/messages/TokenRevokedV1"
-  ingressoja-users:
-    address: ingressoja-users
-    description: "Tópico SNS ingressoja-users."
+  ticketpro-users:
+    address: ticketpro-users
+    description: "Tópico SNS ticketpro-users."
     messages:
       UserCreationFailedV1:
         "$ref": "#/components/messages/UserCreationFailedV1"
-  ingressoja-orders:
-    address: ingressoja-orders
-    description: "Tópico SNS ingressoja-orders."
+  ticketpro-orders:
+    address: ticketpro-orders
+    description: "Tópico SNS ticketpro-orders."
     messages:
       OrderCreatedV1:
         "$ref": "#/components/messages/OrderCreatedV1"
@@ -41,9 +41,9 @@ channels:
         "$ref": "#/components/messages/OrderCancelledV1"
       RefundRequestedV1:
         "$ref": "#/components/messages/RefundRequestedV1"
-  ingressoja-inventory:
-    address: ingressoja-inventory
-    description: "Tópico SNS ingressoja-inventory."
+  ticketpro-inventory:
+    address: ticketpro-inventory
+    description: "Tópico SNS ticketpro-inventory."
     messages:
       InventoryReservedV1:
         "$ref": "#/components/messages/InventoryReservedV1"
@@ -53,9 +53,9 @@ channels:
         "$ref": "#/components/messages/InventoryReservationExpiredV1"
       TicketsIssuedV1:
         "$ref": "#/components/messages/TicketsIssuedV1"
-  ingressoja-payments:
-    address: ingressoja-payments
-    description: "Tópico SNS ingressoja-payments."
+  ticketpro-payments:
+    address: ticketpro-payments
+    description: "Tópico SNS ticketpro-payments."
     messages:
       PaymentApprovedV1:
         "$ref": "#/components/messages/PaymentApprovedV1"
@@ -67,321 +67,321 @@ operations:
   publishUserRegisteredV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-auth"
+      "$ref": "#/channels/ticketpro-auth"
     summary: "auth-service publica UserRegistered v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-auth/messages/UserRegisteredV1"
+      - "$ref": "#/channels/ticketpro-auth/messages/UserRegisteredV1"
     x-service: auth-service
   userReceivesUserRegisteredV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-auth"
+      "$ref": "#/channels/ticketpro-auth"
     summary: "user-service consome UserRegistered v1."
     messages:
-      - "$ref": "#/channels/ingressoja-auth/messages/UserRegisteredV1"
+      - "$ref": "#/channels/ticketpro-auth/messages/UserRegisteredV1"
     x-service: user-service
-    x-queue: ingressoja-user-service
-    x-dlq: ingressoja-user-service-dlq
+    x-queue: ticketpro-user-service
+    x-dlq: ticketpro-user-service-dlq
   publishTokenRevokedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-auth"
+      "$ref": "#/channels/ticketpro-auth"
     summary: "auth-service publica TokenRevoked v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-auth/messages/TokenRevokedV1"
+      - "$ref": "#/channels/ticketpro-auth/messages/TokenRevokedV1"
     x-service: auth-service
   gatewayReceivesTokenRevokedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-auth"
+      "$ref": "#/channels/ticketpro-auth"
     summary: "gateway consome TokenRevoked v1."
     messages:
-      - "$ref": "#/channels/ingressoja-auth/messages/TokenRevokedV1"
+      - "$ref": "#/channels/ticketpro-auth/messages/TokenRevokedV1"
     x-service: gateway
-    x-queue: ingressoja-gateway
-    x-dlq: ingressoja-gateway-dlq
+    x-queue: ticketpro-gateway
+    x-dlq: ticketpro-gateway-dlq
   publishUserCreationFailedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-users"
+      "$ref": "#/channels/ticketpro-users"
     summary: "user-service publica UserCreationFailed v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-users/messages/UserCreationFailedV1"
+      - "$ref": "#/channels/ticketpro-users/messages/UserCreationFailedV1"
     x-service: user-service
   authReceivesUserCreationFailedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-users"
+      "$ref": "#/channels/ticketpro-users"
     summary: "auth-service consome UserCreationFailed v1."
     messages:
-      - "$ref": "#/channels/ingressoja-users/messages/UserCreationFailedV1"
+      - "$ref": "#/channels/ticketpro-users/messages/UserCreationFailedV1"
     x-service: auth-service
-    x-queue: ingressoja-auth-service
-    x-dlq: ingressoja-auth-service-dlq
+    x-queue: ticketpro-auth-service
+    x-dlq: ticketpro-auth-service-dlq
   publishOrderCreatedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "order-service publica OrderCreated v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/OrderCreatedV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCreatedV1"
     x-service: order-service
   inventoryReceivesOrderCreatedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "inventory-service consome OrderCreated v1."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/OrderCreatedV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCreatedV1"
     x-service: inventory-service
-    x-queue: ingressoja-inventory-service
-    x-dlq: ingressoja-inventory-service-dlq
+    x-queue: ticketpro-inventory-service
+    x-dlq: ticketpro-inventory-service-dlq
   publishOrderCreatedV2:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "order-service publica OrderCreated v2 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/OrderCreatedV2"
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCreatedV2"
     x-service: order-service
   inventoryReceivesOrderCreatedV2:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "inventory-service consome OrderCreated v2."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/OrderCreatedV2"
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCreatedV2"
     x-service: inventory-service
-    x-queue: ingressoja-inventory-service
-    x-dlq: ingressoja-inventory-service-dlq
+    x-queue: ticketpro-inventory-service
+    x-dlq: ticketpro-inventory-service-dlq
   publishPaymentRequestedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "order-service publica PaymentRequested v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/PaymentRequestedV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/PaymentRequestedV1"
     x-service: order-service
   paymentReceivesPaymentRequestedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "payment-service consome PaymentRequested v1."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/PaymentRequestedV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/PaymentRequestedV1"
     x-service: payment-service
-    x-queue: ingressoja-payment-service
-    x-dlq: ingressoja-payment-service-dlq
+    x-queue: ticketpro-payment-service
+    x-dlq: ticketpro-payment-service-dlq
   publishOrderConfirmedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "order-service publica OrderConfirmed v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/OrderConfirmedV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderConfirmedV1"
     x-service: order-service
   inventoryReceivesOrderConfirmedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "inventory-service consome OrderConfirmed v1."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/OrderConfirmedV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderConfirmedV1"
     x-service: inventory-service
-    x-queue: ingressoja-inventory-service
-    x-dlq: ingressoja-inventory-service-dlq
+    x-queue: ticketpro-inventory-service
+    x-dlq: ticketpro-inventory-service-dlq
   userReceivesOrderConfirmedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "user-service consome OrderConfirmed v1."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/OrderConfirmedV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderConfirmedV1"
     x-service: user-service
-    x-queue: ingressoja-user-service
-    x-dlq: ingressoja-user-service-dlq
+    x-queue: ticketpro-user-service
+    x-dlq: ticketpro-user-service-dlq
   publishOrderCancelledV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "order-service publica OrderCancelled v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/OrderCancelledV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCancelledV1"
     x-service: order-service
   inventoryReceivesOrderCancelledV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "inventory-service consome OrderCancelled v1."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/OrderCancelledV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCancelledV1"
     x-service: inventory-service
-    x-queue: ingressoja-inventory-service
-    x-dlq: ingressoja-inventory-service-dlq
+    x-queue: ticketpro-inventory-service
+    x-dlq: ticketpro-inventory-service-dlq
   notificationReceivesOrderCancelledV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "notification-service consome OrderCancelled v1."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/OrderCancelledV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCancelledV1"
     x-service: notification-service
-    x-queue: ingressoja-notification-service
-    x-dlq: ingressoja-notification-service-dlq
+    x-queue: ticketpro-notification-service
+    x-dlq: ticketpro-notification-service-dlq
   publishRefundRequestedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "order-service publica RefundRequested v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/RefundRequestedV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/RefundRequestedV1"
     x-service: order-service
   paymentReceivesRefundRequestedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-orders"
+      "$ref": "#/channels/ticketpro-orders"
     summary: "payment-service consome RefundRequested v1."
     messages:
-      - "$ref": "#/channels/ingressoja-orders/messages/RefundRequestedV1"
+      - "$ref": "#/channels/ticketpro-orders/messages/RefundRequestedV1"
     x-service: payment-service
-    x-queue: ingressoja-payment-service
-    x-dlq: ingressoja-payment-service-dlq
+    x-queue: ticketpro-payment-service
+    x-dlq: ticketpro-payment-service-dlq
   publishInventoryReservedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-inventory"
+      "$ref": "#/channels/ticketpro-inventory"
     summary: "inventory-service publica InventoryReserved v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-inventory/messages/InventoryReservedV1"
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryReservedV1"
     x-service: inventory-service
   orderReceivesInventoryReservedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-inventory"
+      "$ref": "#/channels/ticketpro-inventory"
     summary: "order-service consome InventoryReserved v1."
     messages:
-      - "$ref": "#/channels/ingressoja-inventory/messages/InventoryReservedV1"
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryReservedV1"
     x-service: order-service
-    x-queue: ingressoja-order-service
-    x-dlq: ingressoja-order-service-dlq
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
   publishInventoryRejectedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-inventory"
+      "$ref": "#/channels/ticketpro-inventory"
     summary: "inventory-service publica InventoryRejected v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-inventory/messages/InventoryRejectedV1"
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryRejectedV1"
     x-service: inventory-service
   orderReceivesInventoryRejectedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-inventory"
+      "$ref": "#/channels/ticketpro-inventory"
     summary: "order-service consome InventoryRejected v1."
     messages:
-      - "$ref": "#/channels/ingressoja-inventory/messages/InventoryRejectedV1"
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryRejectedV1"
     x-service: order-service
-    x-queue: ingressoja-order-service
-    x-dlq: ingressoja-order-service-dlq
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
   publishInventoryReservationExpiredV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-inventory"
+      "$ref": "#/channels/ticketpro-inventory"
     summary: "inventory-service publica InventoryReservationExpired v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-inventory/messages/InventoryReservationExpiredV1"
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryReservationExpiredV1"
     x-service: inventory-service
   orderReceivesInventoryReservationExpiredV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-inventory"
+      "$ref": "#/channels/ticketpro-inventory"
     summary: "order-service consome InventoryReservationExpired v1."
     messages:
-      - "$ref": "#/channels/ingressoja-inventory/messages/InventoryReservationExpiredV1"
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryReservationExpiredV1"
     x-service: order-service
-    x-queue: ingressoja-order-service
-    x-dlq: ingressoja-order-service-dlq
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
   publishTicketsIssuedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-inventory"
+      "$ref": "#/channels/ticketpro-inventory"
     summary: "inventory-service publica TicketsIssued v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-inventory/messages/TicketsIssuedV1"
+      - "$ref": "#/channels/ticketpro-inventory/messages/TicketsIssuedV1"
     x-service: inventory-service
   userReceivesTicketsIssuedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-inventory"
+      "$ref": "#/channels/ticketpro-inventory"
     summary: "user-service consome TicketsIssued v1."
     messages:
-      - "$ref": "#/channels/ingressoja-inventory/messages/TicketsIssuedV1"
+      - "$ref": "#/channels/ticketpro-inventory/messages/TicketsIssuedV1"
     x-service: user-service
-    x-queue: ingressoja-user-service
-    x-dlq: ingressoja-user-service-dlq
+    x-queue: ticketpro-user-service
+    x-dlq: ticketpro-user-service-dlq
   notificationReceivesTicketsIssuedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-inventory"
+      "$ref": "#/channels/ticketpro-inventory"
     summary: "notification-service consome TicketsIssued v1."
     messages:
-      - "$ref": "#/channels/ingressoja-inventory/messages/TicketsIssuedV1"
+      - "$ref": "#/channels/ticketpro-inventory/messages/TicketsIssuedV1"
     x-service: notification-service
-    x-queue: ingressoja-notification-service
-    x-dlq: ingressoja-notification-service-dlq
+    x-queue: ticketpro-notification-service
+    x-dlq: ticketpro-notification-service-dlq
   publishPaymentApprovedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-payments"
+      "$ref": "#/channels/ticketpro-payments"
     summary: "payment-service publica PaymentApproved v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-payments/messages/PaymentApprovedV1"
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentApprovedV1"
     x-service: payment-service
   orderReceivesPaymentApprovedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-payments"
+      "$ref": "#/channels/ticketpro-payments"
     summary: "order-service consome PaymentApproved v1."
     messages:
-      - "$ref": "#/channels/ingressoja-payments/messages/PaymentApprovedV1"
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentApprovedV1"
     x-service: order-service
-    x-queue: ingressoja-order-service
-    x-dlq: ingressoja-order-service-dlq
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
   publishPaymentFailedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-payments"
+      "$ref": "#/channels/ticketpro-payments"
     summary: "payment-service publica PaymentFailed v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-payments/messages/PaymentFailedV1"
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentFailedV1"
     x-service: payment-service
   orderReceivesPaymentFailedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-payments"
+      "$ref": "#/channels/ticketpro-payments"
     summary: "order-service consome PaymentFailed v1."
     messages:
-      - "$ref": "#/channels/ingressoja-payments/messages/PaymentFailedV1"
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentFailedV1"
     x-service: order-service
-    x-queue: ingressoja-order-service
-    x-dlq: ingressoja-order-service-dlq
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
   publishPaymentRefundedV1:
     action: send
     channel:
-      "$ref": "#/channels/ingressoja-payments"
+      "$ref": "#/channels/ticketpro-payments"
     summary: "payment-service publica PaymentRefunded v1 via outbox."
     messages:
-      - "$ref": "#/channels/ingressoja-payments/messages/PaymentRefundedV1"
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentRefundedV1"
     x-service: payment-service
   orderReceivesPaymentRefundedV1:
     action: receive
     channel:
-      "$ref": "#/channels/ingressoja-payments"
+      "$ref": "#/channels/ticketpro-payments"
     summary: "order-service consome PaymentRefunded v1."
     messages:
-      - "$ref": "#/channels/ingressoja-payments/messages/PaymentRefundedV1"
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentRefundedV1"
     x-service: order-service
-    x-queue: ingressoja-order-service
-    x-dlq: ingressoja-order-service-dlq
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
 components:
   messages:
     UserRegisteredV1:

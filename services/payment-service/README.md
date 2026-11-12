@@ -1,6 +1,6 @@
 # payment-service
 
-Pagamentos do IngressoJá, em C# com .NET 10. Simula um provedor de pagamento lento e instável (RFC 0003 §5.6). Nesta fase (F0) o serviço só expõe os health checks. O consumidor de `PaymentRequested`, o worker com lease e o provedor simulado chegam na F2.
+Pagamentos do Ticket Pro, em C# com .NET 10. Simula um provedor de pagamento lento e instável (RFC 0003 §5.6). Nesta fase (F0) o serviço só expõe os health checks. O consumidor de `PaymentRequested`, o worker com lease e o provedor simulado chegam na F2.
 
 | Endpoint | Resposta |
 |---|---|

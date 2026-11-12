@@ -17,7 +17,7 @@ Go é usado em 4 componentes (gateway, inventory, notification, autoscaler) e C#
 
 ## Decisão
 
-Criamos **`shared/go`** (módulo Go referenciado via `go.work`/`replace`) e **`shared/dotnet`** (class library `IngressoJa.Shared` referenciada por `ProjectReference`). Ambas têm escopo fechado:
+Criamos **`shared/go`** (módulo Go referenciado via `go.work`/`replace`) e **`shared/dotnet`** (class library `TicketPro.Shared` referenciada por `ProjectReference`). Ambas têm escopo fechado:
 
 | Pacote | Conteúdo |
 |---|---|

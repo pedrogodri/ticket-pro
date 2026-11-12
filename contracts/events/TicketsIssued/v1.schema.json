@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/TicketsIssued/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/TicketsIssued/v1.schema.json",
   "title": "TicketsIssued v1",
   "description": "Ingressos emitidos (um código por unidade); alimenta 'meus ingressos' (CQRS) e o comprovante no S3.",
-  "x-topic": "ingressoja-inventory",
+  "x-topic": "ticketpro-inventory",
   "x-producer": "inventory-service",
   "x-consumers": [
     "user-service",

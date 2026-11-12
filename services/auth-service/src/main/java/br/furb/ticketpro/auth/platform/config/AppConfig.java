@@ -1,4 +1,4 @@
-package br.furb.ingressoja.auth.platform.config;
+package br.furb.ticketpro.auth.platform.config;
 
 import java.util.Locale;
 import java.util.Map;

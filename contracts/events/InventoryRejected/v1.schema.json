@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/InventoryRejected/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/InventoryRejected/v1.schema.json",
   "title": "InventoryRejected v1",
   "description": "Reserva negada; o pedido é cancelado sem compensação.",
-  "x-topic": "ingressoja-inventory",
+  "x-topic": "ticketpro-inventory",
   "x-producer": "inventory-service",
   "x-consumers": [
     "order-service"

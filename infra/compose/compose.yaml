@@ -1,6 +1,6 @@
 # Shared infrastructure: AWS emulation (MiniStack) and the networks every service joins.
 # Included by the root docker-compose.yml. Only operational tools may publish ports here.
-name: ingressoja
+name: ticketpro
 
 services:
   ministack:
@@ -75,6 +75,6 @@ volumes:
 
 networks:
   edge:
-    name: ingressoja-edge
+    name: ticketpro-edge
   backend:
-    name: ingressoja-backend
+    name: ticketpro-backend

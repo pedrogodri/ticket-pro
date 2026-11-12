@@ -15,6 +15,6 @@ services:
 
 networks:
   edge:
-    name: ingressoja-edge
+    name: ticketpro-edge
   backend:
-    name: ingressoja-backend
+    name: ticketpro-backend

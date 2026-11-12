@@ -33,10 +33,10 @@
 - **AWS:** `AWS_ENDPOINT_URL=http://ministack:4566`, `AWS_REGION=us-east-1`, `AWS_ACCESS_KEY_ID=test`, `AWS_SECRET_ACCESS_KEY=test`.
 - **Portas:** só `gateway` publica porta (`8080:8080`). A exceção é `jaeger` (`16686:16686`, ferramenta de operação). Todo serviço escuta em `PORT=8080` internamente.
 - **Recursos AWS** (nomes exatos, padrões §3):
-  - **Tópicos:** `ingressoja-auth`, `ingressoja-users`, `ingressoja-orders`, `ingressoja-inventory`, `ingressoja-payments`.
-  - **Filas:** `ingressoja-gateway`, `ingressoja-auth-service`, `ingressoja-user-service`, `ingressoja-order-service`, `ingressoja-inventory-service`, `ingressoja-payment-service`, `ingressoja-notification-service`, cada uma com `-dlq`, `maxReceiveCount=3` e `VisibilityTimeout=30`.
-  - **Bucket:** `ingressoja-receipts`.
-  - **Segredo:** `ingressoja/auth/jwt-signing-key` com formato `{"current":{"kid","privatePem"},"previous":null}`.
+  - **Tópicos:** `ticketpro-auth`, `ticketpro-users`, `ticketpro-orders`, `ticketpro-inventory`, `ticketpro-payments`.
+  - **Filas:** `ticketpro-gateway`, `ticketpro-auth-service`, `ticketpro-user-service`, `ticketpro-order-service`, `ticketpro-inventory-service`, `ticketpro-payment-service`, `ticketpro-notification-service`, cada uma com `-dlq`, `maxReceiveCount=3` e `VisibilityTimeout=30`.
+  - **Bucket:** `ticketpro-receipts`.
+  - **Segredo:** `ticketpro/auth/jwt-signing-key` com formato `{"current":{"kid","privatePem"},"previous":null}`.
 - **Assinaturas** (filter policy no atributo `type`), copiadas de `docs/arquitetura.md` §7:
 
   | Fila | Tipos |
@@ -102,9 +102,9 @@ services/order-service/                    # template TS
 
 **Interfaces:**
 - Produces:
-  - Redes Docker `ingressoja-edge` e `ingressoja-backend`, com nomes fixos via `name:`.
+  - Redes Docker `ticketpro-edge` e `ticketpro-backend`, com nomes fixos via `name:`.
   - Serviço `ministack` com healthcheck em `/_ministack/health`.
-  - Função bash `awsl <args...>`, que roda `amazon/aws-cli:2.39.7` na rede `ingressoja-backend` com as envs AWS globais e `--endpoint-url http://ministack:4566`.
+  - Função bash `awsl <args...>`, que roda `amazon/aws-cli:2.39.7` na rede `ticketpro-backend` com as envs AWS globais e `--endpoint-url http://ministack:4566`.
   - `scripts/wait-healthy.sh [timeout_s=180]`, que retorna 0 quando todo container do projeto com healthcheck está `healthy`.
 
 - [ ] **Step 1: Criar a branch**
@@ -121,8 +121,8 @@ Expected: FAIL (ministack não existe ou não alcançável)
 
 - [ ] **Step 3: Implementar o compose**
 
-- `infra/compose/compose.yaml`: serviço `ministack` (sem `ports`, redes `ingressoja-backend`, healthcheck `wget -qO- http://localhost:4566/_ministack/health || exit 1`, interval 5s, retries 20). Se a imagem não tiver `wget`, usar `python3 -c` com `urllib`. Conferir qual binário existe com `docker run --rm --entrypoint sh ministackorg/ministack:1.5.40 -c 'command -v wget curl python3'`.
-- `docker-compose.yml`: `name: ingressoja` + `include: [infra/compose/compose.yaml]`.
+- `infra/compose/compose.yaml`: serviço `ministack` (sem `ports`, redes `ticketpro-backend`, healthcheck `wget -qO- http://localhost:4566/_ministack/health || exit 1`, interval 5s, retries 20). Se a imagem não tiver `wget`, usar `python3 -c` com `urllib`. Conferir qual binário existe com `docker run --rm --entrypoint sh ministackorg/ministack:1.5.40 -c 'command -v wget curl python3'`.
+- `docker-compose.yml`: `name: ticketpro` + `include: [infra/compose/compose.yaml]`.
 - `.env.example`: as envs AWS globais.
 
 - [ ] **Step 4: Rodar**
@@ -148,7 +148,7 @@ git commit -m "feat(infra): add MiniStack base compose and aws cli helper"
 - Modify: `infra/compose/compose.yaml` (serviço `infra-init`), `scripts/verify-infra.sh`, `.env.example`
 
 **Interfaces:**
-- Consumes: rede `ingressoja-backend` e serviço `ministack` (Task 1).
+- Consumes: rede `ticketpro-backend` e serviço `ministack` (Task 1).
 - Produces:
   - Serviço compose `infra-init`, que os serviços usam com `depends_on: infra-init: condition: service_completed_successfully`.
   - Variável Terraform `subscriptions: map(list(string))`, com chave = nome do serviço e valor = tipos (tabela de Global Constraints), mais `topic_by_type: map(string)`.
@@ -161,12 +161,12 @@ Estender `scripts/verify-infra.sh`:
 - **Tópicos:** os 5 existem (`awsl sns list-topics`).
 - **Filas:** as 7 + 7 DLQs existem. Cada fila tem `RedrivePolicy` com `maxReceiveCount` 3 apontando para a sua DLQ, e `VisibilityTimeout` = 30.
 - **Assinaturas:** cada fila tem assinatura no(s) tópico(s) certo(s), com `FilterPolicy` contendo exatamente os tipos da tabela.
-- **Bucket:** `ingressoja-receipts` existe.
-- **Segredo:** `ingressoja/auth/jwt-signing-key` existe, e `.current.kid` e `.current.privatePem` são strings não vazias (`jq`).
+- **Bucket:** `ticketpro-receipts` existe.
+- **Segredo:** `ticketpro/auth/jwt-signing-key` existe, e `.current.kid` e `.current.privatePem` são strings não vazias (`jq`).
 - **Envs:** cada `*_TOPIC_ARN` e `*_QUEUE_URL` do `.env` bate com o recurso real.
 
 Run: `scripts/verify-infra.sh`
-Expected: FAIL em "topic ingressoja-auth not found"
+Expected: FAIL em "topic ticketpro-auth not found"
 
 - [ ] **Step 2: Implementar os módulos Terraform**
 
@@ -213,7 +213,7 @@ git commit -m "feat(infra): provision SNS, SQS+DLQ, S3 and JWT secret with Terra
 - Create (condicional): `docs/adr/00NN-*.md` para cada plano B acionado — numeração a partir de **0019** (0018 fica reservado para a Task 4) + linha em `docs/adr/README.md`
 
 **Interfaces:**
-- Consumes: `awsl`, os recursos da Task 2 e a fila `ingressoja-inventory-service` (assina `OrderCreated`).
+- Consumes: `awsl`, os recursos da Task 2 e a fila `ticketpro-inventory-service` (assina `OrderCreated`).
 - Produces: um documento com veredito PASS/FAIL por item, que decide formato de mensagem e mecanismos para a F1.
 
 O spike usa o próprio script como teste. Cada verificação imprime `PASS <id>` ou `FAIL <id>: <observado>`, e o script retorna 0 só se tudo passar.
@@ -222,7 +222,7 @@ O spike usa o próprio script como teste. Cada verificação imprime `PASS <id>`
 
 | id | Verificação | Fonte |
 |---|---|---|
-| `S1-filter` | Publicar `type=OrderCreated` em `ingressoja-orders` chega na fila do inventory e **não** na do payment; `type=PaymentRequested` faz o inverso | ADR-0001 |
+| `S1-filter` | Publicar `type=OrderCreated` em `ticketpro-orders` chega na fila do inventory e **não** na do payment; `type=PaymentRequested` faz o inverso | ADR-0001 |
 | `S2-body` | Corpo recebido sem raw delivery é envelope SNS (`Type=Notification`, `Message` = envelope); registrar o formato exato e se `MessageAttributes` aparecem | RFC 0001 §5.2 |
 | `S3-raw` | Com `RawMessageDelivery=true` numa assinatura temporária, o corpo é o envelope puro e os atributos chegam como `MessageAttributes` SQS | RFC 0001 §5.2 |
 | `S4-receivecount` | `ApproximateReceiveCount` incrementa a cada receive sem delete | RFC 0003 §5.4 |
@@ -312,7 +312,7 @@ Expected: PASS
   - `USER nonroot:nonroot`, `EXPOSE 8080`.
 - **compose.yaml:**
   - serviço `gateway`, `build: .`, `env_file: .env.example`, `ports: ["8080:8080"]`;
-  - redes `ingressoja-edge` + `ingressoja-backend`, com os mesmos nomes fixos (`name:`). A forma de declarar fica com quem implementa, mas tem de funcionar no primeiro `docker compose up` a partir de `down -v` (testado na Task 8, Step 4) **e** o `docker compose -f services/gateway/compose.yaml config` tem de ser válido sozinho;
+  - redes `ticketpro-edge` + `ticketpro-backend`, com os mesmos nomes fixos (`name:`). A forma de declarar fica com quem implementa, mas tem de funcionar no primeiro `docker compose up` a partir de `down -v` (testado na Task 8, Step 4) **e** o `docker compose -f services/gateway/compose.yaml config` tem de ser válido sozinho;
   - `healthcheck: ["CMD","/gateway","healthcheck"]`.
 
 Run: `scripts/check-autonomy.sh services/gateway`
@@ -335,7 +335,7 @@ git commit -m "feat(gateway): add Go service template with health checks"
 ### Task 5: Template Java: `services/auth-service`
 
 **Files:**
-- Create: `services/auth-service/{pom.xml,mvnw,.mvn/,src/main/java/br/furb/ingressoja/auth/AuthApplication.java,src/main/java/br/furb/ingressoja/auth/platform/config/AppConfig.java,src/main/java/br/furb/ingressoja/auth/platform/health/HealthController.java,src/main/resources/application.yml,src/test/java/br/furb/ingressoja/auth/platform/config/AppConfigTest.java,src/test/java/br/furb/ingressoja/auth/platform/health/HealthControllerTest.java,Dockerfile,.dockerignore,compose.yaml,.env.example,Makefile,README.md}`
+- Create: `services/auth-service/{pom.xml,mvnw,.mvn/,src/main/java/br/furb/ticketpro/auth/AuthApplication.java,src/main/java/br/furb/ticketpro/auth/platform/config/AppConfig.java,src/main/java/br/furb/ticketpro/auth/platform/health/HealthController.java,src/main/resources/application.yml,src/test/java/br/furb/ticketpro/auth/platform/config/AppConfigTest.java,src/test/java/br/furb/ticketpro/auth/platform/health/HealthControllerTest.java,Dockerfile,.dockerignore,compose.yaml,.env.example,Makefile,README.md}`
 - Modify: `docker-compose.yml`
 
 **Interfaces:**
@@ -373,7 +373,7 @@ Expected: PASS
   - final: `eclipse-temurin:21-jre-alpine`;
   - usuário `app` (uid 10001) criado no Dockerfile;
   - healthcheck via `wget -qO- localhost:8080/health/live`.
-- **compose.yaml:** sem `ports`, rede `ingressoja-backend`.
+- **compose.yaml:** sem `ports`, rede `ticketpro-backend`.
 
 Run: `scripts/check-autonomy.sh services/auth-service`
 Expected: exit 0

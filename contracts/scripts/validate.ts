@@ -51,7 +51,7 @@ for (const type of readdirSync(eventsDir).sort()) {
     }
   }
 }
-const envelope = ajv.getSchema("https://ingressoja.local/contracts/envelope.schema.json");
+const envelope = ajv.getSchema("https://ticketpro.local/contracts/envelope.schema.json");
 if (!envelope) fail("envelope.schema.json não carregado");
 
 const keyOf = (msg: Message): string => `${String(msg.type)}@${String(msg.version)}`;

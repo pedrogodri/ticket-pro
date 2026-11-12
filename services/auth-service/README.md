@@ -1,6 +1,6 @@
 # auth-service
 
-Credenciais, emissão de JWT e JWKS do IngressoJá, em Java 21 com Spring Boot 4.0. Nesta fase (F0) o serviço só expõe os health checks. O cadastro, o login, o refresh e a chave no Secrets Manager chegam na F2 (RFC 0002).
+Credenciais, emissão de JWT e JWKS do Ticket Pro, em Java 21 com Spring Boot 4.0. Nesta fase (F0) o serviço só expõe os health checks. O cadastro, o login, o refresh e a chave no Secrets Manager chegam na F2 (RFC 0002).
 
 | Endpoint | Resposta |
 |---|---|

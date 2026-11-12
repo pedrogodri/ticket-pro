@@ -21,13 +21,13 @@ resource "aws_sns_topic" "this" {
 
 resource "aws_sqs_queue" "dlq" {
   for_each                  = var.subscriptions
-  name                      = "ingressoja-${each.key}-dlq"
+  name                      = "ticketpro-${each.key}-dlq"
   message_retention_seconds = var.message_retention_seconds
 }
 
 resource "aws_sqs_queue" "this" {
   for_each                   = var.subscriptions
-  name                       = "ingressoja-${each.key}"
+  name                       = "ticketpro-${each.key}"
   visibility_timeout_seconds = var.visibility_timeout_seconds
   message_retention_seconds  = var.message_retention_seconds
 

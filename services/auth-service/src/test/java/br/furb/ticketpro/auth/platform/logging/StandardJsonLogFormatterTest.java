@@ -1,4 +1,4 @@
-package br.furb.ingressoja.auth.platform.logging;
+package br.furb.ticketpro.auth.platform.logging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

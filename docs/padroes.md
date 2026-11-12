@@ -1,4 +1,4 @@
-# Padrões e convenções — IngressoJá
+# Padrões e convenções — Ticket Pro
 
 > Vale para qualquer pessoa ou agente que escreva código neste repositório. As decisões estão em [`adr/`](adr/README.md), os protocolos em [`rfc/`](rfc/INDEX.md) e as mensagens em [`../contracts/`](../contracts/README.md). Se algo aqui conflitar com um ADR, o ADR vale, e este arquivo deve ser corrigido.
 
@@ -107,7 +107,7 @@ Testes ficam ao lado do código (`*_test.go`). Testes de integração usam a bui
 
 ```
 services/auth-service/
-├── src/main/java/br/furb/ingressoja/auth/
+├── src/main/java/br/furb/ticketpro/auth/
 │   ├── AuthApplication.java
 │   ├── platform/                       # envelope, outbox, idempotency, messaging, logging (próprio)
 │   └── modules/
@@ -169,10 +169,10 @@ TypeScript `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`,
 | O quê | Padrão | Exemplo |
 |---|---|---|
 | Pasta/serviço/container | kebab-case, sufixo `-service` (exceto gateway e autoscaler) | `order-service` |
-| Tópico SNS | `ingressoja-<domínio>` | `ingressoja-orders` |
-| Fila SQS / DLQ | `ingressoja-<serviço>` / `ingressoja-<serviço>-dlq` | `ingressoja-payment-service-dlq` |
+| Tópico SNS | `ticketpro-<domínio>` | `ticketpro-orders` |
+| Fila SQS / DLQ | `ticketpro-<serviço>` / `ticketpro-<serviço>-dlq` | `ticketpro-payment-service-dlq` |
 | Evento (`type`) | PascalCase, fato no passado ou comando substantivo | `OrderConfirmed`, `PaymentRequested` |
-| Bucket / segredo | `ingressoja-<uso>` / `ingressoja/<serviço>/<nome>` | `ingressoja-receipts`, `ingressoja/auth/jwt-signing-key` |
+| Bucket / segredo | `ticketpro-<uso>` / `ticketpro/<serviço>/<nome>` | `ticketpro-receipts`, `ticketpro/auth/jwt-signing-key` |
 | Banco / container de banco | `<domínio>` / `<domínio>-db` | `orders` / `orders-db` |
 | Tabela | snake_case, plural | `processed_messages` |
 | Coluna | snake_case. `*_id` (uuid), `*_at` (timestamptz), `*_cents` (bigint) | `payment_deadline_at` |
@@ -212,7 +212,7 @@ As variáveis específicas (timeouts, taxas de falha, JWT, rate limit) estão na
 
 ```json
 {
-  "type": "https://ingressoja.local/errors/validation",
+  "type": "https://ticketpro.local/errors/validation",
   "title": "Requisição inválida",
   "status": 400,
   "detail": "quantity deve estar entre 1 e 6",

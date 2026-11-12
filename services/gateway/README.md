@@ -1,6 +1,6 @@
 # gateway
 
-Ponto de entrada único do IngressoJá, escrito em Go. Nesta fase (F0) ele só expõe os health checks. O resto chega na F2 (RFC 0002):
+Ponto de entrada único do Ticket Pro, escrito em Go. Nesta fase (F0) ele só expõe os health checks. O resto chega na F2 (RFC 0002):
 
 - roteamento;
 - validação de JWT via JWKS;

@@ -13,4 +13,4 @@ services:
 
 networks:
   backend:
-    name: ingressoja-backend
+    name: ticketpro-backend

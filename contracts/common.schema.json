@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/common.schema.json",
-  "title": "Tipos comuns dos contratos do IngressoJá",
+  "$id": "https://ticketpro.local/contracts/common.schema.json",
+  "title": "Tipos comuns dos contratos do Ticket Pro",
   "$defs": {
     "uuid": {
       "type": "string",

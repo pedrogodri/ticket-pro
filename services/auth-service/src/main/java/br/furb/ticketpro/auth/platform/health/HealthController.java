@@ -1,4 +1,4 @@
-package br.furb.ingressoja.auth.platform.health;
+package br.furb.ticketpro.auth.platform.health;
 
 import java.util.Map;
 import org.springframework.http.MediaType;

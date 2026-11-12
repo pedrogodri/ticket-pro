@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/UserRegistered/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/UserRegistered/v1.schema.json",
   "title": "UserRegistered v1",
   "description": "Credencial criada no auth-service; o user-service cria o perfil.",
-  "x-topic": "ingressoja-auth",
+  "x-topic": "ticketpro-auth",
   "x-producer": "auth-service",
   "x-consumers": [
     "user-service"

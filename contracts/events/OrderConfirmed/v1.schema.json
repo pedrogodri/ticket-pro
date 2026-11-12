@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/OrderConfirmed/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/OrderConfirmed/v1.schema.json",
   "title": "OrderConfirmed v1",
   "description": "Pagamento aprovado dentro do prazo; o inventory emite os ingressos e o user registra a compra.",
-  "x-topic": "ingressoja-orders",
+  "x-topic": "ticketpro-orders",
   "x-producer": "order-service",
   "x-consumers": [
     "inventory-service",

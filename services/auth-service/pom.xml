@@ -10,11 +10,11 @@
 		<relativePath/>
 	</parent>
 
-	<groupId>br.furb.ingressoja</groupId>
+	<groupId>br.furb.ticketpro</groupId>
 	<artifactId>auth-service</artifactId>
 	<version>0.1.0</version>
 	<name>auth-service</name>
-	<description>IngressoJá auth-service: credentials, JWT issuing and JWKS (RFC 0002).</description>
+	<description>Ticket Pro auth-service: credentials, JWT issuing and JWKS (RFC 0002).</description>
 
 	<properties>
 		<java.version>21</java.version>

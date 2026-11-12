@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/OrderCreated/v2.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/OrderCreated/v2.schema.json",
   "title": "OrderCreated v2",
   "description": "v2 adiciona o campo obrigatório channel (origem da compra). Consumidores aceitam v1 via upcaster (channel = API).",
-  "x-topic": "ingressoja-orders",
+  "x-topic": "ticketpro-orders",
   "x-producer": "order-service",
   "x-consumers": [
     "inventory-service"

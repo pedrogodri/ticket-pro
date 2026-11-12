@@ -23,7 +23,7 @@ As fontes da verdade continuam sendo **`shared/go/`**, **`shared/dotnet/`** e **
 | Origem | Destino no serviço | Ajuste na cópia |
 |---|---|---|
 | `shared/go/<pkg>` | `services/<svc>/internal/platform/<pkg>` | Reescreve o import path do módulo para `<módulo do serviço>/internal/platform/...` |
-| `shared/dotnet/src/**.cs` | `services/<svc>/src/Platform/` | Nenhum (namespace `IngressoJa.Platform`) |
+| `shared/dotnet/src/**.cs` | `services/<svc>/src/Platform/` | Nenhum (namespace `TicketPro.Platform`) |
 | `contracts/**` relevantes | `services/<svc>/contracts/` | Só os schemas em que o serviço aparece em `x-producer`/`x-consumers` + `envelope`/`common` |
 
 Cada destino recebe `.vendored.json`, com `{source, version, sha256}`, e todo arquivo copiado ganha um cabeçalho dizendo "NÃO EDITE: copiado de `<origem>@<versão>`; altere a origem e rode `scripts/sync-shared.sh`". O `sync-shared.sh --check` (CI da raiz) falha se alguma cópia divergir da origem na versão declarada.

@@ -24,7 +24,7 @@ A mensageria assíncrona é obrigatória e a infraestrutura é AWS emulada (Mini
 
 ## Decisão
 
-Escolhemos **SNS → SQS**. Há um tópico SNS por **domínio produtor** (`ingressoja-auth`, `-users`, `-orders`, `-inventory`, `-payments`) e uma fila SQS por **serviço consumidor** (`ingressoja-<svc>`), assinada com **filter policy** no atributo `type`. Cada fila tem DLQ `ingressoja-<svc>-dlq` com `maxReceiveCount=3` (configurável no Terraform).
+Escolhemos **SNS → SQS**. Há um tópico SNS por **domínio produtor** (`ticketpro-auth`, `-users`, `-orders`, `-inventory`, `-payments`) e uma fila SQS por **serviço consumidor** (`ticketpro-<svc>`), assinada com **filter policy** no atributo `type`. Cada fila tem DLQ `ticketpro-<svc>-dlq` com `maxReceiveCount=3` (configurável no Terraform).
 
 ### Consequências positivas
 

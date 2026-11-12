@@ -23,7 +23,7 @@ rsync -a \
 echo "==> make test (in $workdir/$name)"
 (cd "$workdir/$name" && make test)
 
-image="ingressoja-autonomy/${name}:check"
+image="ticketpro-autonomy/${name}:check"
 echo "==> docker build ($image)"
 docker build -q -t "$image" "$workdir/$name" >/dev/null
 

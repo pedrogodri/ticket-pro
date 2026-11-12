@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/OrderCreated/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/OrderCreated/v1.schema.json",
   "title": "OrderCreated v1",
   "description": "Pedido aceito (202) e pendente; inicia a saga pedindo reserva ao inventory.",
-  "x-topic": "ingressoja-orders",
+  "x-topic": "ticketpro-orders",
   "x-producer": "order-service",
   "x-consumers": [
     "inventory-service"

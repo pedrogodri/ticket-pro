@@ -4,11 +4,11 @@
 # ministack:4566 exactly like the services do. Values come from the environment (.env).
 
 AWS_CLI_IMAGE="${AWS_CLI_IMAGE:-amazon/aws-cli:2.39.7}"
-INGRESSOJA_NETWORK="${INGRESSOJA_NETWORK:-ingressoja-backend}"
+TICKETPRO_NETWORK="${TICKETPRO_NETWORK:-ticketpro-backend}"
 
 awsl() {
   docker run --rm \
-    --network "$INGRESSOJA_NETWORK" \
+    --network "$TICKETPRO_NETWORK" \
     -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}" \
     -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}" \
     -e AWS_REGION="${AWS_REGION:-us-east-1}" \

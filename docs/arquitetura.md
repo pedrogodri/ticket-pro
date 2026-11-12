@@ -1,10 +1,10 @@
-# Arquitetura — IngressoJá
+# Arquitetura — Ticket Pro
 
 > Fonte da verdade dos eventos: [`contracts/`](../contracts/). As decisões estão justificadas em [`docs/adr/`](adr/) e os detalhes de protocolo em [`docs/rfc/`](rfc/).
 
 ## 1. Visão geral
 
-O IngressoJá vende ingressos **por setor e quantidade** para eventos carregados por seed. É somente backend: o cliente (scripts, coleção HTTP) fala apenas com o **gateway**. Os serviços se comunicam por **eventos assíncronos** (SNS → SQS), e cada serviço tem seu próprio banco.
+O Ticket Pro vende ingressos **por setor e quantidade** para eventos carregados por seed. É somente backend: o cliente (scripts, coleção HTTP) fala apenas com o **gateway**. Os serviços se comunicam por **eventos assíncronos** (SNS → SQS), e cada serviço tem seu próprio banco.
 
 ### Premissas
 
@@ -96,8 +96,8 @@ flowchart LR
 
 ## 4. Mensageria
 
-- **Tópicos SNS por domínio produtor:** `ingressoja-auth`, `ingressoja-users`, `ingressoja-orders`, `ingressoja-inventory`, `ingressoja-payments`.
-- **Uma fila SQS por consumidor** (`ingressoja-<serviço>`), assinada nos tópicos necessários com **filter policy** no atributo `type`. Cada fila tem DLQ (`ingressoja-<serviço>-dlq`) e `maxReceiveCount = 3`.
+- **Tópicos SNS por domínio produtor:** `ticketpro-auth`, `ticketpro-users`, `ticketpro-orders`, `ticketpro-inventory`, `ticketpro-payments`.
+- **Uma fila SQS por consumidor** (`ticketpro-<serviço>`), assinada nos tópicos necessários com **filter policy** no atributo `type`. Cada fila tem DLQ (`ticketpro-<serviço>-dlq`) e `maxReceiveCount = 3`.
 - Toda mensagem leva o envelope `messageId, correlationId, type, version, occurredAt, payload` (RFC-001). Os atributos SNS/SQS `type`, `version`, `correlationId` e `traceparent` são duplicados para filtro e tracing.
 - Os produtores publicam **somente via outbox** (mesma transação do efeito). O relay drena com backoff exponencial e retoma sozinho quando o broker volta (R6).
 - Os consumidores aceitam tanto a mensagem crua quanto o envelope de notificação do SNS (o MiniStack não documenta raw delivery).
@@ -212,21 +212,21 @@ As transições são sempre `UPDATE ... WHERE id = ? AND status = <esperado>`. E
 
 | Evento | Versão | Tópico | Publicado por | Consumido por |
 |---|---|---|---|---|
-| `UserRegistered` | v1 | `ingressoja-auth` | auth | user |
-| `TokenRevoked` | v1 | `ingressoja-auth` | auth | gateway |
-| `UserCreationFailed` | v1 | `ingressoja-users` | user | auth |
-| `OrderCreated` | v1, **v2** | `ingressoja-orders` | order | inventory |
-| `PaymentRequested` | v1 | `ingressoja-orders` | order | payment |
-| `OrderConfirmed` | v1 | `ingressoja-orders` | order | inventory, user |
-| `OrderCancelled` | v1 | `ingressoja-orders` | order | inventory, notification |
-| `RefundRequested` | v1 | `ingressoja-orders` | order | payment |
-| `InventoryReserved` | v1 | `ingressoja-inventory` | inventory | order |
-| `InventoryRejected` | v1 | `ingressoja-inventory` | inventory | order |
-| `InventoryReservationExpired` | v1 | `ingressoja-inventory` | inventory | order |
-| `TicketsIssued` | v1 | `ingressoja-inventory` | inventory | user, notification |
-| `PaymentApproved` | v1 | `ingressoja-payments` | payment | order |
-| `PaymentFailed` | v1 | `ingressoja-payments` | payment | order |
-| `PaymentRefunded` | v1 | `ingressoja-payments` | payment | order |
+| `UserRegistered` | v1 | `ticketpro-auth` | auth | user |
+| `TokenRevoked` | v1 | `ticketpro-auth` | auth | gateway |
+| `UserCreationFailed` | v1 | `ticketpro-users` | user | auth |
+| `OrderCreated` | v1, **v2** | `ticketpro-orders` | order | inventory |
+| `PaymentRequested` | v1 | `ticketpro-orders` | order | payment |
+| `OrderConfirmed` | v1 | `ticketpro-orders` | order | inventory, user |
+| `OrderCancelled` | v1 | `ticketpro-orders` | order | inventory, notification |
+| `RefundRequested` | v1 | `ticketpro-orders` | order | payment |
+| `InventoryReserved` | v1 | `ticketpro-inventory` | inventory | order |
+| `InventoryRejected` | v1 | `ticketpro-inventory` | inventory | order |
+| `InventoryReservationExpired` | v1 | `ticketpro-inventory` | inventory | order |
+| `TicketsIssued` | v1 | `ticketpro-inventory` | inventory | user, notification |
+| `PaymentApproved` | v1 | `ticketpro-payments` | payment | order |
+| `PaymentFailed` | v1 | `ticketpro-payments` | payment | order |
+| `PaymentRefunded` | v1 | `ticketpro-payments` | payment | order |
 
 **Eventos com 2+ consumidores:** `TicketsIssued`, `OrderConfirmed` e `OrderCancelled`.
 

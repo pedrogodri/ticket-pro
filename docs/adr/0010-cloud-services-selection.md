@@ -14,8 +14,8 @@ O enunciado exige ≥3 categorias de serviço de nuvem, sendo mensageria obrigat
 | Categoria | Serviço | Uso real | Quem usa |
 |---|---|---|---|
 | Mensageria | **SNS + SQS** (+ DLQ) | Todos os eventos de domínio (ADR-0001) | todos |
-| Armazenamento de objetos | **S3** (`ingressoja-receipts`) | Comprovante JSON do pedido confirmado/cancelado (`receipts/{orderId}.json`) | notification |
-| Segurança / segredos | **Secrets Manager** (`ingressoja/auth/jwt-signing-key`) | Par de chaves de assinatura JWT (PEM + `kid`), lido no boot do auth | auth |
+| Armazenamento de objetos | **S3** (`ticketpro-receipts`) | Comprovante JSON do pedido confirmado/cancelado (`receipts/{orderId}.json`) | notification |
+| Segurança / segredos | **Secrets Manager** (`ticketpro/auth/jwt-signing-key`) | Par de chaves de assinatura JWT (PEM + `kid`), lido no boot do auth | auth |
 
 Avaliados e **não** adotados:
 

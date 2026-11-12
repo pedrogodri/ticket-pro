@@ -19,7 +19,7 @@ O bônus pede autoescala por fila. O ambiente é Docker Compose, sem Kubernetes 
 
 Um container `autoscaler` em Go, com acesso a `/var/run/docker.sock`, faz a cada `AUTOSCALER_INTERVAL_S`:
 
-1. lê `ApproximateNumberOfMessages` (+ `NotVisible`) das filas configuradas em `AUTOSCALER_TARGETS` (ex.: `payment-service=ingressoja-payment-service`);
+1. lê `ApproximateNumberOfMessages` (+ `NotVisible`) das filas configuradas em `AUTOSCALER_TARGETS` (ex.: `payment-service=ticketpro-payment-service`);
 2. calcula `desired = clamp(ceil(depth / AUTOSCALER_MSGS_PER_REPLICA), MIN, MAX)`;
 3. aplica histerese: só reduz depois de `AUTOSCALER_COOLDOWN_S` estável;
 4. cria ou remove containers do serviço clonando a config de uma réplica existente (mesma imagem, env, redes e labels do compose).

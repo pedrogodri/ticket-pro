@@ -1,4 +1,4 @@
-package br.furb.ingressoja.auth.platform.logging;
+package br.furb.ticketpro.auth.platform.logging;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;

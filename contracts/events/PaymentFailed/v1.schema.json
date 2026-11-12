@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/PaymentFailed/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/PaymentFailed/v1.schema.json",
   "title": "PaymentFailed v1",
   "description": "Cobrança recusada, com erro ou timeout do provedor; dispara a compensação.",
-  "x-topic": "ingressoja-payments",
+  "x-topic": "ticketpro-payments",
   "x-producer": "payment-service",
   "x-consumers": [
     "order-service"

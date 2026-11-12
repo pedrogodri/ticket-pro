@@ -1,6 +1,6 @@
 # order-service
 
-API assíncrona de pedidos e orquestrador da saga de compra do IngressoJá, em TypeScript com Node 22. Nesta fase (F0) o serviço só expõe os health checks. O resto chega na F2 (`docs/arquitetura.md` §6):
+API assíncrona de pedidos e orquestrador da saga de compra do Ticket Pro, em TypeScript com Node 22. Nesta fase (F0) o serviço só expõe os health checks. O resto chega na F2 (`docs/arquitetura.md` §6):
 
 - `POST /orders` com resposta 202;
 - `GET /orders/{id}`;

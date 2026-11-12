@@ -1,8 +1,8 @@
 {
-  "name": "@ingressoja/contracts",
+  "name": "@ticketpro/contracts",
   "private": true,
   "type": "module",
-  "description": "Contratos de mensagens do IngressoJá (JSON Schema 2020-12 + AsyncAPI 3.0) e validação.",
+  "description": "Contratos de mensagens do Ticket Pro (JSON Schema 2020-12 + AsyncAPI 3.0) e validação.",
   "engines": {
     "node": ">=22.18"
   },

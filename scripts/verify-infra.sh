@@ -19,7 +19,7 @@ fi
 
 
 # --- expected topology (docs/arquitetura.md §7; bash 3.2 compatible: no assoc arrays) ---
-TOPICS="ingressoja-auth ingressoja-users ingressoja-orders ingressoja-inventory ingressoja-payments"
+TOPICS="ticketpro-auth ticketpro-users ticketpro-orders ticketpro-inventory ticketpro-payments"
 # service:comma-separated event types
 SUBSCRIPTIONS="
 gateway:TokenRevoked
@@ -32,11 +32,11 @@ notification-service:TicketsIssued,OrderCancelled
 "
 topic_of() {
   case "$1" in
-    UserRegistered|TokenRevoked) echo ingressoja-auth ;;
-    UserCreationFailed) echo ingressoja-users ;;
-    OrderCreated|PaymentRequested|OrderConfirmed|OrderCancelled|RefundRequested) echo ingressoja-orders ;;
-    InventoryReserved|InventoryRejected|InventoryReservationExpired|TicketsIssued) echo ingressoja-inventory ;;
-    PaymentApproved|PaymentFailed|PaymentRefunded) echo ingressoja-payments ;;
+    UserRegistered|TokenRevoked) echo ticketpro-auth ;;
+    UserCreationFailed) echo ticketpro-users ;;
+    OrderCreated|PaymentRequested|OrderConfirmed|OrderCancelled|RefundRequested) echo ticketpro-orders ;;
+    InventoryReserved|InventoryRejected|InventoryReservationExpired|TicketsIssued) echo ticketpro-inventory ;;
+    PaymentApproved|PaymentFailed|PaymentRefunded) echo ticketpro-payments ;;
     *) echo "unknown-type-$1" ;;
   esac
 }
@@ -47,7 +47,7 @@ topics_json=$(awsl sns list-topics 2>/dev/null || echo '{"Topics":[]}')
 for t in $TOPICS; do
   arn=$(echo "$topics_json" | jq -r --arg t "$t" '.Topics[].TopicArn | select(endswith(":" + $t))')
   if [ -n "$arn" ]; then pass "topic $t"; else fail "topic $t not found"; continue; fi
-  var="$(env_name "${t#ingressoja-}")_TOPIC_ARN"
+  var="$(env_name "${t#ticketpro-}")_TOPIC_ARN"
   expected=$(eval "echo \"\${$var:-}\"")
   if [ "$expected" = "$arn" ]; then pass "env $var"; else fail "env $var='$expected' but topic is '$arn'"; fi
 done
@@ -55,7 +55,7 @@ done
 # --- queues, DLQs, subscriptions ---------------------------------------------
 for entry in $SUBSCRIPTIONS; do
   svc="${entry%%:*}"; types="${entry#*:}"
-  q="ingressoja-$svc"; dlq="$q-dlq"
+  q="ticketpro-$svc"; dlq="$q-dlq"
   url=$(awsl sqs get-queue-url --queue-name "$q" 2>/dev/null | jq -r '.QueueUrl // empty')
   dlq_url=$(awsl sqs get-queue-url --queue-name "$dlq" 2>/dev/null | jq -r '.QueueUrl // empty')
   if [ -z "$url" ]; then fail "queue $q not found"; continue; fi
@@ -94,22 +94,22 @@ for entry in $SUBSCRIPTIONS; do
 done
 
 # --- storage and secrets -----------------------------------------------------
-if awsl s3api head-bucket --bucket ingressoja-receipts >/dev/null 2>&1; then pass "bucket ingressoja-receipts"; else fail "bucket ingressoja-receipts not found"; fi
-secret=$(awsl secretsmanager get-secret-value --secret-id ingressoja/auth/jwt-signing-key 2>/dev/null | jq -r '.SecretString // empty')
+if awsl s3api head-bucket --bucket ticketpro-receipts >/dev/null 2>&1; then pass "bucket ticketpro-receipts"; else fail "bucket ticketpro-receipts not found"; fi
+secret=$(awsl secretsmanager get-secret-value --secret-id ticketpro/auth/jwt-signing-key 2>/dev/null | jq -r '.SecretString // empty')
 if [ -n "$secret" ] && echo "$secret" | jq -e '(.current.kid | type == "string" and length > 0) and (.current.privatePem | startswith("-----BEGIN"))' >/dev/null; then
-  pass "secret ingressoja/auth/jwt-signing-key"
+  pass "secret ticketpro/auth/jwt-signing-key"
 else
-  fail "secret ingressoja/auth/jwt-signing-key missing or malformed"
+  fail "secret ticketpro/auth/jwt-signing-key missing or malformed"
 fi
 
 # --- observability: a span sent to the collector shows up in Jaeger --------------
 TELEMETRYGEN_IMAGE="${TELEMETRYGEN_IMAGE:-ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.164.0}"
 smoke="f0-smoke"
-if docker run --rm --network "$INGRESSOJA_NETWORK" "$TELEMETRYGEN_IMAGE" traces \
+if docker run --rm --network "$TICKETPRO_NETWORK" "$TELEMETRYGEN_IMAGE" traces \
   --otlp-endpoint otel-collector:4317 --otlp-insecure --service "$smoke" --traces 1 >/dev/null 2>&1; then
   found=no
   for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if docker run --rm --network "$INGRESSOJA_NETWORK" busybox:1.37.0 \
+    if docker run --rm --network "$TICKETPRO_NETWORK" busybox:1.37.0 \
         wget -qO- http://jaeger:16686/api/services 2>/dev/null | jq -e --arg s "$smoke" '.data | index($s)' >/dev/null; then
       found=yes; break
     fi

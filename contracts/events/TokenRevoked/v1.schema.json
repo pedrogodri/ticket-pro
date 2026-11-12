@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/TokenRevoked/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/TokenRevoked/v1.schema.json",
   "title": "TokenRevoked v1",
   "description": "Access token revogado; o gateway copia o jti para sua blacklist até expiresAt.",
-  "x-topic": "ingressoja-auth",
+  "x-topic": "ticketpro-auth",
   "x-producer": "auth-service",
   "x-consumers": [
     "gateway"

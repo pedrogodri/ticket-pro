@@ -1,8 +1,8 @@
 # Registro do Tema — Trabalho Final de Sistemas Distribuídos (FURB)
 
-**Tema:** IngressoJá, venda online de ingressos por setor (estilo Ticketmaster). Somente backend.
+**Tema:** Ticket Pro, venda online de ingressos por setor (estilo Ticketmaster). Somente backend.
 
-> O enunciado cita o IngressoJá como exemplo. O professor confirmou que o grupo pode usá-lo como tema.
+> O enunciado cita o Ticket Pro como exemplo. O professor confirmou que o grupo pode usá-lo como tema.
 
 ## Integrantes
 

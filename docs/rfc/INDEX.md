@@ -1,6 +1,6 @@
 # RFCs
 
-Propostas de design do IngressoJá. As decisões fechadas viram ADRs em [`../adr/`](../adr/README.md). As RFCs guardam o detalhe de protocolo e o racional que os ADRs resumem.
+Propostas de design do Ticket Pro. As decisões fechadas viram ADRs em [`../adr/`](../adr/README.md). As RFCs guardam o detalhe de protocolo e o racional que os ADRs resumem.
 
 ## Allocating a number
 

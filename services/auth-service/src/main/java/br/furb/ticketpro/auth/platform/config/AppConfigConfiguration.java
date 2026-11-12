@@ -1,4 +1,4 @@
-package br.furb.ingressoja.auth.platform.config;
+package br.furb.ticketpro.auth.platform.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

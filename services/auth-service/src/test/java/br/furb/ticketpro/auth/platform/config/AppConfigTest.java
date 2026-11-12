@@ -1,4 +1,4 @@
-package br.furb.ingressoja.auth.platform.config;
+package br.furb.ticketpro.auth.platform.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

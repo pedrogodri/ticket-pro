@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/InventoryReservationExpired/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/InventoryReservationExpired/v1.schema.json",
   "title": "InventoryReservationExpired v1",
   "description": "Reserva pendente expirou e o estoque foi devolvido; o order cancela se ainda não estiver em estado final.",
-  "x-topic": "ingressoja-inventory",
+  "x-topic": "ticketpro-inventory",
   "x-producer": "inventory-service",
   "x-consumers": [
     "order-service"

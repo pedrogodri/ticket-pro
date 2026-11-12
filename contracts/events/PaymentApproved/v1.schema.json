@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/PaymentApproved/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/PaymentApproved/v1.schema.json",
   "title": "PaymentApproved v1",
   "description": "Provedor aprovou a cobrança (pode chegar após o deadline do pedido — ver RFC 0003).",
-  "x-topic": "ingressoja-payments",
+  "x-topic": "ticketpro-payments",
   "x-producer": "payment-service",
   "x-consumers": [
     "order-service"

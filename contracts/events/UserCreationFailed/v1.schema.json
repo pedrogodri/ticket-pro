@@ -1,9 +1,9 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ingressoja.local/contracts/events/UserCreationFailed/v1.schema.json",
+  "$id": "https://ticketpro.local/contracts/events/UserCreationFailed/v1.schema.json",
   "title": "UserCreationFailed v1",
   "description": "Perfil não pôde ser criado; o auth-service compensa removendo a credencial.",
-  "x-topic": "ingressoja-users",
+  "x-topic": "ticketpro-users",
   "x-producer": "user-service",
   "x-consumers": [
     "auth-service"

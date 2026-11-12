@@ -1,4 +1,4 @@
-// Command gateway is the single public entrypoint of IngressoJá.
+// Command gateway is the single public entrypoint of Ticket Pro.
 package main
 
 import (
@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ingressoja/gateway/internal/app"
+	"github.com/ticketpro/gateway/internal/app"
 )
 
 func main() {

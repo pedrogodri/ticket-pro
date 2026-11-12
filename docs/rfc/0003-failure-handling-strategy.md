@@ -98,7 +98,7 @@ Loop por réplica:
 | **Venenosa** (JSON inválido, schema inválido, `type`/`version` não suportados) | log `poison=true` com `messageId` | **não**, `ChangeMessageVisibility(0)` para chegar logo ao `maxReceiveCount` → DLQ |
 | **Transitória** (banco indisponível, deadlock, timeout) | rollback | **não**, `ChangeMessageVisibility(delay(receiveCount))` |
 
-4. Com `ApproximateReceiveCount > SQS_MAX_RECEIVE_COUNT`, o redrive policy do SQS move a mensagem para `ingressoja-<svc>-dlq`. A fila principal continua fluindo.
+4. Com `ApproximateReceiveCount > SQS_MAX_RECEIVE_COUNT`, o redrive policy do SQS move a mensagem para `ticketpro-<svc>-dlq`. A fila principal continua fluindo.
 
 - **F2:** `docker kill` numa réplica do inventory com mensagem em voo → nada foi commitado nem houve ack → depois do visibility timeout a outra réplica recebe → efeito único.
 - **F3:** o script `scripts/f3-duplicate.sh` publica o **mesmo envelope** (mesmo `messageId`) 5× → 1 linha de efeito e 4 logs `duplicate=true`.

@@ -1,6 +1,6 @@
 # contracts/
 
-Fonte da verdade das mensagens assíncronas do IngressoJá. As regras completas estão na [RFC 0001](../docs/rfc/0001-message-contract-and-event-versioning.md).
+Fonte da verdade das mensagens assíncronas do Ticket Pro. As regras completas estão na [RFC 0001](../docs/rfc/0001-message-contract-and-event-versioning.md).
 
 | Caminho | Conteúdo |
 |---|---|

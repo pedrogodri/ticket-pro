@@ -1,4 +1,4 @@
-package br.furb.ingressoja.auth.platform.health;
+package br.furb.ticketpro.auth.platform.health;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
