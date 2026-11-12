@@ -1,23 +1,44 @@
 # Standard targets (docs/padroes.md §1.2). Runs from this folder only.
+#
+# TOOLCHAIN=local  uses the .NET SDK installed on your machine (.NET 10).
+# TOOLCHAIN=docker runs every command inside $(SDK_IMAGE) (nothing to install but Docker).
+# Default: local when `dotnet` is on PATH, docker otherwise. Override: `make test TOOLCHAIN=docker`.
+# Do not mix modes in the same checkout: bin/ and obj/ store absolute paths; `git clean -fdX` resets them.
+SDK_IMAGE ?= mcr.microsoft.com/dotnet/sdk:10.0
+SLN := PaymentService.sln
+TOOLCHAIN ?= $(if $(shell command -v dotnet 2>/dev/null),local,docker)
+
+ifeq ($(TOOLCHAIN),docker)
+# Docker socket + host override let Testcontainers start sibling containers (integration tests).
+RUN := docker run --rm -v "$(CURDIR):/src" -w /src \
+	-v ticketpro-nuget-cache:/root/.nuget/packages \
+	-e DOTNET_CLI_TELEMETRY_OPTOUT=1 -e DOTNET_NOLOGO=1 \
+	-v /var/run/docker.sock:/var/run/docker.sock \
+	-e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal --add-host=host.docker.internal:host-gateway \
+	$(SDK_IMAGE)
+else
+RUN :=
+endif
+
 .PHONY: build test test-integration lint fmt typecheck run
 
 build:
-	dotnet build PaymentService.sln -c Release
+	$(RUN) dotnet build $(SLN) -c Release
 
 test:
-	dotnet test PaymentService.sln
+	$(RUN) dotnet test $(SLN)
 
 test-integration:
-	dotnet test PaymentService.sln --filter "Category=Integration"
+	$(RUN) dotnet test $(SLN) --filter "Category=Integration"
 
 lint:
-	dotnet format PaymentService.sln --verify-no-changes
+	$(RUN) dotnet format $(SLN) --verify-no-changes
 
 fmt:
-	dotnet format PaymentService.sln
+	$(RUN) dotnet format $(SLN)
 
 typecheck:
-	dotnet build PaymentService.sln -warnaserror
+	$(RUN) dotnet build $(SLN) -warnaserror
 
 run:
 	docker compose -f compose.yaml up --build
