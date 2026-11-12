@@ -1,0 +1,22 @@
+# Shared infrastructure: AWS emulation (MiniStack) and the networks every service joins.
+# Included by the root docker-compose.yml. Only operational tools may publish ports here.
+name: ingressoja
+
+services:
+  ministack:
+    image: ministackorg/ministack:1.5.40
+    environment:
+      MINISTACK_REGION: ${AWS_REGION:-us-east-1}
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request as r; r.urlopen('http://localhost:4566/_ministack/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+networks:
+  edge:
+    name: ingressoja-edge
+  backend:
+    name: ingressoja-backend

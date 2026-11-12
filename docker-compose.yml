@@ -1,0 +1,5 @@
+# Root orchestration (ADR-0016): includes shared infra and each service's own compose.yaml.
+name: ingressoja
+
+include:
+  - infra/compose/compose.yaml
