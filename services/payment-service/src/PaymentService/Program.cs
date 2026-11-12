@@ -12,12 +12,9 @@ var config = AppConfig.FromEnvironment(new Dictionary<string, string?>
 
 builder.WebHost.UseUrls($"http://0.0.0.0:{config.Port}");
 builder.Logging.ClearProviders();
-builder.Logging.AddJsonConsole(o =>
-{
-    o.IncludeScopes = true;
-    o.UseUtcTimestamp = true;
-    o.TimestampFormat = "yyyy-MM-ddTHH:mm:ss.fffZ";
-});
+builder.Logging
+    .AddConsole(o => o.FormatterName = StandardJsonConsoleFormatter.FormatterName)
+    .AddConsoleFormatter<StandardJsonConsoleFormatter, StandardJsonFormatterOptions>(o => o.ServiceName = config.ServiceName);
 builder.Logging.SetMinimumLevel(config.LogLevel switch
 {
     "debug" => LogLevel.Debug,
