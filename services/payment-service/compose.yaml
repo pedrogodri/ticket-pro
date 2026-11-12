@@ -1,9 +1,13 @@
-# payment-service: internal only (no published ports). Included by the root docker-compose.yml.
+# payment-service + its own database (ADR-0004, ADR-0020). Included by the root docker-compose.yml.
+# The database lives only on ticketpro-payment-service-data: no other service can reach it.
 services:
   payment-service:
     build: .
     env_file: .env.example
-    networks: [backend]
+    networks: [backend, payment-service-data]
+    depends_on:
+      payment-service-migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live >/dev/null || exit 1"]
       interval: 5s
@@ -11,6 +15,35 @@ services:
       retries: 20
       start_period: 10s
 
+  payment-service-migrate:
+    image: flyway/flyway:13.11.1-alpine
+    command: migrate
+    env_file: db.env.example
+    volumes:
+      - ./migrations:/flyway/sql:ro
+    networks: [payment-service-data]
+    depends_on:
+      payments-db:
+        condition: service_healthy
+
+  payments-db:
+    image: postgres:16-alpine
+    env_file: db.env.example
+    volumes:
+      - payments-data:/var/lib/postgresql/data
+    networks: [payment-service-data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payments_owner -d payments"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
 networks:
   backend:
     name: ticketpro-backend
+  payment-service-data:
+    name: ticketpro-payment-service-data
+    internal: true
+
+volumes:
+  payments-data:

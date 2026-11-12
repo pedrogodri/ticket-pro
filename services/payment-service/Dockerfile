@@ -10,6 +10,7 @@ RUN dotnet publish src/PaymentService/PaymentService.csproj -c Release -o /out -
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine
 WORKDIR /app
 COPY --from=build /out ./
+COPY contracts /contracts
 USER app
 EXPOSE 8080
 HEALTHCHECK --interval=5s --timeout=3s --retries=20 --start-period=10s \

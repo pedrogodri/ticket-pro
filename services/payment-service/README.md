@@ -4,7 +4,7 @@ Pagamentos do Ticket Pro, em C# com .NET 10. Simula um provedor de pagamento len
 
 **Dono:** Gabriel.
 
-**Estado:** esqueleto. Hoje só tem config validada, logs JSON e health checks. A lib `shared/dotnet`, o banco e o relay chegam na F1. O consumidor, o worker com lease e o provedor simulado chegam na F2.
+**Estado:** plataforma pronta (F1): banco com migrations Flyway, outbox + relay (`Platform/`, vendorizado de `shared/dotnet`) e readiness com `db`/`broker`. O consumidor, o worker com lease e o provedor simulado chegam na F2.
 
 ## Responsabilidades
 
@@ -51,6 +51,12 @@ O banco é `payments`, no container `payments-db`. Tabelas: `payments` (`order_i
 | `SERVICE_NAME` | sim | `payment-service` |
 | `PORT` | sim | `8080` |
 | `LOG_LEVEL` | sim | `debug` \| `info` \| `warn` \| `error` |
+| `DATABASE_URL` | sim | `postgres://payments_app:…@payments-db:5432/payments` (API, RLS) |
+| `DATABASE_WORKER_URL` | sim | role `payments_worker` (relay, consumidores, worker) |
+| `PAYMENTS_TOPIC_ARN` | sim | `arn:aws:sns:us-east-1:000000000000:ticketpro-payments` |
+| `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_MAX_BACKOFF_MS`, `OUTBOX_CLAIM_LEASE_MS`, `HTTP_CLIENT_TIMEOUT_MS` | não | 200, 50, 30000, 30000, 3000 (RFC 0003 §5.1) |
+
+O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, só desenvolvimento). `src/PaymentService/Platform/` e `contracts/` são cópias geradas por `scripts/sync-shared.sh`: não edite.
 
 ## Comandos
 
