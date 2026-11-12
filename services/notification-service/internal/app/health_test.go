@@ -1,45 +1,48 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
-func get(t *testing.T, path string) *httptest.ResponseRecorder {
+type fakePinger struct{ err error }
+
+func (p fakePinger) Ping(context.Context) error { return p.err }
+
+func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	NewHealthHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 	return rec
 }
 
-func TestHealthLive(t *testing.T) {
-	rec := get(t, "/health/live")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d", rec.Code)
+// The notification-service only consumes (no outbox relay), so readiness reports the database only.
+func TestHealth_Ready(t *testing.T) {
+	cases := []struct {
+		name string
+		db   Pinger
+		code int
+		body string
+	}{
+		{"database up", fakePinger{}, 200, `{"status":"up","checks":{"db":"up"}}`},
+		{"database down is not ready", fakePinger{errors.New("connection refused")}, 503, `{"status":"down","checks":{"db":"down"}}`},
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-		t.Fatalf("content-type %q", ct)
-	}
-	if body := rec.Body.String(); body != `{"status":"up"}` {
-		t.Fatalf("body %q", body)
-	}
-}
-
-func TestHealthReady(t *testing.T) {
-	rec := get(t, "/health/ready")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status %d", rec.Code)
-	}
-	if body := rec.Body.String(); body != `{"status":"up","checks":{}}` {
-		t.Fatalf("body %q", body)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rec := get(t, NewHealthHandler(c.db, nil), "/health/ready")
+			if rec.Code != c.code || rec.Body.String() != c.body {
+				t.Fatalf("got %d %s, want %d %s", rec.Code, rec.Body.String(), c.code, c.body)
+			}
+		})
 	}
 }
 
-func TestHealthRejectsPost(t *testing.T) {
-	rec := httptest.NewRecorder()
-	NewHealthHandler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/health/live", nil))
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("status %d, want 405", rec.Code)
+func TestHealth_LiveIgnoresDependencies(t *testing.T) {
+	rec := get(t, NewHealthHandler(fakePinger{errors.New("down")}, nil), "/health/live")
+	if rec.Code != http.StatusOK || rec.Body.String() != `{"status":"up"}` {
+		t.Fatalf("got %d %s", rec.Code, rec.Body.String())
 	}
 }

@@ -12,10 +12,10 @@ import (
 const shutdownTimeout = 10 * time.Second
 
 // Run serves HTTP until ctx is cancelled, then shuts down gracefully.
-func Run(ctx context.Context, cfg Config, logger *slog.Logger) error {
+func Run(ctx context.Context, cfg Config, logger *slog.Logger, handler http.Handler) error {
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           NewHealthHandler(),
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

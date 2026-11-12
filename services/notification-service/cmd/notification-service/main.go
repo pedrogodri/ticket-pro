@@ -4,13 +4,17 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/ticketpro/notification-service/internal/app"
+	"github.com/ticketpro/notification-service/internal/platform/logging"
 )
 
 func main() {
@@ -20,19 +24,30 @@ func main() {
 
 	cfg, err := app.LoadConfig(os.Getenv)
 	if err != nil {
-		app.NewLogger(os.Stderr, app.Config{ServiceName: "notification-service"}).Error("invalid_config", "error", err.Error())
+		logging.New(os.Stderr, "notification-service", slog.LevelInfo).Error("invalid_config", "error", err.Error())
 		os.Exit(1)
 	}
-
-	logger := app.NewLogger(os.Stdout, cfg)
+	logger := logging.New(os.Stdout, cfg.ServiceName, cfg.LogLevel)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := app.Run(ctx, cfg, logger); err != nil {
-		logger.Error("server_failed", "error", err.Error())
+	if err := run(ctx, cfg, logger); err != nil {
+		logger.Error("service_failed", "error", err.Error())
 		os.Exit(1)
 	}
+}
+
+// run serves the probes. The SQS consumers (TicketsIssued, OrderCancelled) arrive in F2 and will use
+// the worker pool; this service has no outbox because it publishes nothing.
+func run(ctx context.Context, cfg app.Config, logger *slog.Logger) error {
+	// Pools connect lazily: the service starts even if the database is still coming up (readiness says so).
+	appPool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("DATABASE_URL: %w", err)
+	}
+	defer appPool.Close()
+	return app.Run(ctx, cfg, logger, app.NewHealthHandler(appPool, nil))
 }
 
 // healthcheck probes the liveness endpoint; used by the container HEALTHCHECK (no shell in distroless).

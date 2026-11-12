@@ -4,7 +4,7 @@ Registro de notificações e comprovantes de compra no S3 do Ticket Pro, em Go. 
 
 **Donos:** Pedro e Matheus.
 
-**Estado:** esqueleto. Hoje só tem config validada, logs JSON e health checks. O banco e o consumidor idempotente chegam na F1/F2.
+**Estado:** plataforma pronta (F1): banco com migrations Flyway (`processed_messages`) e readiness com `db`. Os consumidores chegam na F2.
 
 ## Responsabilidades
 
@@ -47,6 +47,11 @@ O banco é `notifications`, no container `notifications-db`. Tabelas: `notificat
 | `SERVICE_NAME` | sim | `notification-service` |
 | `PORT` | sim | `8080` |
 | `LOG_LEVEL` | sim | `debug` \| `info` \| `warn` \| `error` |
+| `DATABASE_URL` | sim | role `notifications_app` (RLS) |
+| `DATABASE_WORKER_URL` | sim | role `notifications_worker` (consumidores, jobs) |
+| `HTTP_CLIENT_TIMEOUT_MS` | não | 3000 |
+
+O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, só desenvolvimento). A pasta `internal/platform/` e a `contracts/` são cópias geradas por `scripts/sync-shared.sh`: não edite.
 
 ## Comandos
 
