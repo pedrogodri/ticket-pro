@@ -1,15 +1,48 @@
-# inventory-service: internal only (no published ports). Included by the root docker-compose.yml.
+# inventory-service + its own database (ADR-0004, ADR-0020). Included by the root docker-compose.yml.
+# The database lives only on ticketpro-inventory-service-data: no other service can reach it.
 services:
   inventory-service:
     build: .
     env_file: .env.example
-    networks: [backend]
+    networks: [backend, inventory-service-data]
+    depends_on:
+      inventory-migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "/inventory-service", "healthcheck"]
       interval: 5s
       timeout: 3s
       retries: 10
 
+  inventory-migrate:
+    image: flyway/flyway:13.11.1-alpine
+    command: migrate
+    env_file: db.env.example
+    volumes:
+      - ./migrations:/flyway/sql:ro
+    networks: [inventory-service-data]
+    depends_on:
+      inventory-db:
+        condition: service_healthy
+
+  inventory-db:
+    image: postgres:16-alpine
+    env_file: db.env.example
+    volumes:
+      - inventory-data:/var/lib/postgresql/data
+    networks: [inventory-service-data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory_owner -d inventory"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
 networks:
   backend:
     name: ticketpro-backend
+  inventory-service-data:
+    name: ticketpro-inventory-service-data
+    internal: true
+
+volumes:
+  inventory-data:

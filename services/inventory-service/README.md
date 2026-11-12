@@ -4,7 +4,7 @@ Catálogo de eventos, estoque por setor, reservas e emissão de ingressos do Tic
 
 **Dono:** Pedro.
 
-**Estado:** esqueleto. Hoje só tem config validada, logs JSON e health checks. O banco e a plataforma de mensageria chegam na F1, e o domínio na F2.
+**Estado:** plataforma pronta (F1): banco com migrations Flyway, outbox + relay e readiness com `db`/`broker`. O domínio chega na F2.
 
 ## Responsabilidades
 
@@ -59,6 +59,12 @@ Constraints-chave:
 | `SERVICE_NAME` | sim | `inventory-service` |
 | `PORT` | sim | `8080` |
 | `LOG_LEVEL` | sim | `debug` \| `info` \| `warn` \| `error` |
+| `DATABASE_URL` | sim | role `inventory_app` (API, RLS) |
+| `DATABASE_WORKER_URL` | sim | role `inventory_worker` (relay, consumidores, jobs) |
+| `INVENTORY_TOPIC_ARN` | sim | `arn:aws:sns:us-east-1:000000000000:ticketpro-inventory` |
+| `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_MAX_BACKOFF_MS`, `OUTBOX_CLAIM_LEASE_MS`, `HTTP_CLIENT_TIMEOUT_MS` | não | 200, 50, 30000, 30000, 3000 (RFC 0003 §5.1) |
+
+O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, só desenvolvimento). A pasta `internal/platform/` e a `contracts/` são cópias geradas por `scripts/sync-shared.sh`: não edite.
 
 ## Comandos
 
