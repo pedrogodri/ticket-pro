@@ -6,3 +6,4 @@ include:
   - services/gateway/compose.yaml
   - services/auth-service/compose.yaml
   - services/payment-service/compose.yaml
+  - services/order-service/compose.yaml
