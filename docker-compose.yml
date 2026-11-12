@@ -4,3 +4,4 @@ name: ingressoja
 include:
   - infra/compose/compose.yaml
   - services/gateway/compose.yaml
+  - services/auth-service/compose.yaml
