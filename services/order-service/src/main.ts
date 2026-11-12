@@ -1,5 +1,10 @@
+import { SNSClient } from "@aws-sdk/client-sns";
+import pg from "pg";
 import { loadConfig, type Config } from "./app/config.js";
 import { buildServer } from "./app/server.js";
+import { createLogger } from "./platform/logging.js";
+import { awsClientConfig, SnsPublisher } from "./platform/publisher.js";
+import { OutboxRelay } from "./platform/relay.js";
 
 let config: Config;
 try {
@@ -12,11 +17,44 @@ try {
   process.exit(1);
 }
 
-const app = buildServer(config);
+// API role (RLS) for requests and readiness; worker role for the relay and, in F2, the consumers.
+// Pools connect lazily: the service starts even if the database is still coming up (readiness says so).
+const appPool = new pg.Pool({
+  connectionString: config.databaseUrl,
+  connectionTimeoutMillis: 2000,
+});
+const workerPool = new pg.Pool({
+  connectionString: config.databaseWorkerUrl,
+  connectionTimeoutMillis: 2000,
+});
+
+const sns = new SNSClient({
+  ...awsClientConfig(config.httpClientTimeoutMs),
+  region: config.awsRegion,
+  ...(config.awsEndpointUrl ? { endpoint: config.awsEndpointUrl } : {}),
+});
+
+const app = buildServer(config, {
+  pingDb: async () => {
+    await appPool.query("SELECT 1");
+  },
+  brokerUp: () => relay.brokerUp,
+});
+const relay = new OutboxRelay(
+  workerPool,
+  new SnsPublisher(sns),
+  config.outbox,
+  createLogger(config.serviceName, config.logLevel),
+);
+const stopRelay = new AbortController();
+const relayDone = relay.run(stopRelay.signal);
 
 const shutdown = async (signal: string): Promise<void> => {
   app.log.info({ signal }, "http_server_stopping");
+  stopRelay.abort(); // the current batch finishes; unpublished rows stay in the outbox
   await app.close();
+  await relayDone;
+  await Promise.all([appPool.end(), workerPool.end()]);
   process.exit(0);
 };
 process.once("SIGTERM", () => void shutdown("SIGTERM"));

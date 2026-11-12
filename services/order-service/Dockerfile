@@ -18,6 +18,7 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY package.json ./
+COPY contracts ./contracts
 USER node
 EXPOSE 8080
 HEALTHCHECK --interval=5s --timeout=3s --retries=20 --start-period=5s \

@@ -12,7 +12,11 @@ describe("logger schema", () => {
         done();
       },
     });
-    const app = buildServer({ serviceName: "order-service", port: 8080, logLevel: "info" }, sink);
+    const app = buildServer(
+      { serviceName: "order-service", logLevel: "info" },
+      { pingDb: () => Promise.resolve() },
+      sink,
+    );
 
     app.log.warn("http_server_started");
     await app.close();
