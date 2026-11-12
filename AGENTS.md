@@ -16,13 +16,13 @@ Infra: MiniStack (`AWS_ENDPOINT_URL=http://ministack:4566`), SNS→SQS+DLQ, S3, 
 | Tarefa | Comando |
 |---|---|
 | Subir tudo | `docker compose up --build` (raiz) |
-| Validar contratos | `cd contracts && npm ci && npm run validate && npm run typecheck` |
+| Validar contratos | `make -C contracts check` |
 | Lint / typecheck / testes de um serviço | `cd services/<svc> && make lint typecheck test` |
 | Testes de integração | `cd services/<svc> && make test-integration` |
 | Sincronizar libs/contratos vendorizados | `scripts/sync-shared.sh` (CI: `--check`) |
 | Verificar infra AWS / portas / autonomia | `scripts/verify-infra.sh`, `scripts/check-ports.sh`, `scripts/check-autonomy.sh services/<svc>` |
 
-Serviços com `Makefile` hoje: gateway, auth-service, payment-service, order-service. `scripts/sync-shared.sh` é criado na F1 (ADR-0017).
+Todos os 8 serviços têm `Makefile` e `.devcontainer/`. Sem o SDK no PATH, o `make` roda no container da linguagem (`TOOLCHAIN=docker`). `scripts/sync-shared.sh` é criado na F1 (ADR-0017).
 
 ## External References
 | Need | File |
