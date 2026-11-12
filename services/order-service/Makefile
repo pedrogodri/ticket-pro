@@ -35,7 +35,7 @@ test:
 	$(RUN) sh -c '$(DEPS) && npm test'
 
 test-integration:
-	$(RUN) sh -c '$(DEPS) && npx vitest run --dir tests/integration --passWithNoTests'
+	$(RUN) sh -c '$(DEPS) && npm run test:integration'
 
 lint:
 	$(RUN) sh -c '$(DEPS) && npm run lint'
