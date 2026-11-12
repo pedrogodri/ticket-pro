@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ticketpro.local/contracts/events/PaymentFailed/v1.schema.json",
+  "title": "PaymentFailed v1",
+  "description": "Cobrança recusada, com erro ou timeout do provedor; dispara a compensação.",
+  "x-topic": "ticketpro-payments",
+  "x-producer": "payment-service",
+  "x-consumers": [
+    "order-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "PaymentFailed"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "paymentId",
+        "reason"
+      ],
+      "properties": {
+        "orderId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "paymentId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "DECLINED",
+            "PROVIDER_ERROR",
+            "PROVIDER_TIMEOUT"
+          ]
+        }
+      }
+    }
+  }
+}

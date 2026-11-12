@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ticketpro.local/contracts/events/PaymentRefunded/v1.schema.json",
+  "title": "PaymentRefunded v1",
+  "description": "Estorno concluído para uma aprovação tardia.",
+  "x-topic": "ticketpro-payments",
+  "x-producer": "payment-service",
+  "x-consumers": [
+    "order-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "PaymentRefunded"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "paymentId",
+        "refundId",
+        "amountCents",
+        "currency"
+      ],
+      "properties": {
+        "orderId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "paymentId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "refundId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "amountCents": {
+          "$ref": "../../common.schema.json#/$defs/amountCents"
+        },
+        "currency": {
+          "$ref": "../../common.schema.json#/$defs/currency"
+        }
+      }
+    }
+  }
+}

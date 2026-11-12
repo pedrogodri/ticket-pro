@@ -1,0 +1,26 @@
+{
+  "messageId": "0193a6f2-6c1e-7b9a-9d1f-3f2b1c0e4a55",
+  "correlationId": "c0a8012e-5f7d-4a8e-9b1c-2d3e4f5a6b7c",
+  "type": "TicketsIssued",
+  "version": 1,
+  "occurredAt": "2026-11-20T18:30:12.345Z",
+  "payload": {
+    "orderId": "0193a6f0-2222-7000-8000-000000000002",
+    "userId": "0193a6f0-1111-7000-8000-000000000001",
+    "eventId": "0193a6f0-3333-7000-8000-000000000003",
+    "eventName": "Festival de Verão 2026",
+    "eventStartsAt": "2026-12-12T21:00:00.000Z",
+    "sectorId": "0193a6f0-4444-7000-8000-000000000004",
+    "sectorName": "Pista",
+    "tickets": [
+      {
+        "ticketId": "0193a6f0-9999-7000-8000-000000000009",
+        "code": "K7Q2-9XMA-41PZ"
+      },
+      {
+        "ticketId": "0193a6f0-aaaa-7000-8000-00000000000a",
+        "code": "B3RT-77NC-0QWE"
+      }
+    ]
+  }
+}

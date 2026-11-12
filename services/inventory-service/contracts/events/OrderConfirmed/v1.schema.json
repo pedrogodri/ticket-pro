@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ticketpro.local/contracts/events/OrderConfirmed/v1.schema.json",
+  "title": "OrderConfirmed v1",
+  "description": "Pagamento aprovado dentro do prazo; o inventory emite os ingressos e o user registra a compra.",
+  "x-topic": "ticketpro-orders",
+  "x-producer": "order-service",
+  "x-consumers": [
+    "inventory-service",
+    "user-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "OrderConfirmed"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "userId",
+        "eventId",
+        "sectorId",
+        "quantity",
+        "totalCents",
+        "currency",
+        "confirmedAt"
+      ],
+      "properties": {
+        "orderId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "userId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "eventId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "sectorId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "quantity": {
+          "$ref": "../../common.schema.json#/$defs/quantity"
+        },
+        "totalCents": {
+          "$ref": "../../common.schema.json#/$defs/amountCents"
+        },
+        "currency": {
+          "$ref": "../../common.schema.json#/$defs/currency"
+        },
+        "confirmedAt": {
+          "$ref": "../../common.schema.json#/$defs/timestamp"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "messageId": "0193a6f2-6c1e-7b9a-9d1f-3f2b1c0e4a55",
+  "correlationId": "c0a8012e-5f7d-4a8e-9b1c-2d3e4f5a6b7c",
+  "type": "InventoryReserved",
+  "version": 1,
+  "occurredAt": "2026-11-20T18:30:12.345Z",
+  "payload": {
+    "orderId": "0193a6f0-2222-7000-8000-000000000002",
+    "reservationId": "0193a6f0-5555-7000-8000-000000000005",
+    "eventId": "0193a6f0-3333-7000-8000-000000000003",
+    "sectorId": "0193a6f0-4444-7000-8000-000000000004",
+    "quantity": 2,
+    "unitPriceCents": 25000,
+    "totalCents": 50000,
+    "currency": "BRL",
+    "expiresAt": "2026-11-20T18:31:12.500Z"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ticketpro.local/contracts/events/PaymentRequested/v1.schema.json",
+  "title": "PaymentRequested v1",
+  "description": "Comando do orquestrador para cobrar o pedido reservado.",
+  "x-topic": "ticketpro-orders",
+  "x-producer": "order-service",
+  "x-consumers": [
+    "payment-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "PaymentRequested"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "userId",
+        "amountCents",
+        "currency"
+      ],
+      "properties": {
+        "orderId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "userId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "amountCents": {
+          "$ref": "../../common.schema.json#/$defs/amountCents"
+        },
+        "currency": {
+          "$ref": "../../common.schema.json#/$defs/currency"
+        }
+      }
+    }
+  }
+}
