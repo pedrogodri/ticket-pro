@@ -48,3 +48,10 @@ func TestLoadConfig_Valid(t *testing.T) {
 		t.Fatalf("got %+v, want %+v", cfg, want)
 	}
 }
+
+func TestLoadConfig_MissingLogLevel(t *testing.T) {
+	_, err := LoadConfig(envFrom(map[string]string{"SERVICE_NAME": "autoscaler", "PORT": "8080"}))
+	if err == nil || !strings.Contains(err.Error(), "LOG_LEVEL") {
+		t.Fatalf("want error naming LOG_LEVEL, got %v", err)
+	}
+}
