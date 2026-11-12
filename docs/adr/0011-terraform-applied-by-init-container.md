@@ -1,7 +1,7 @@
 # ADR-0011: Infraestrutura como código com Terraform aplicado por container de init
 
 - **Data**: 2026-11-12
-- **Status**: Aceito
+- **Status**: Aceito — "state efêmero" substituído por [ADR-0019](0019-persistent-terraform-state-volume.md)
 - **Decisores**: Grupo
 - **Tags**: IaC, bônus
 

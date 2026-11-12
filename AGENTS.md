@@ -7,7 +7,7 @@ Sistema distribuído acadêmico (FURB). Só backend. Respostas em PT-BR; código
 |---|---|---|
 | gateway, inventory, notification, autoscaler | Go | `services/{gateway,inventory-service,notification-service,autoscaler}` |
 | auth | Java (Spring Boot) | `services/auth-service` |
-| payment, user | C# (.NET 8) | `services/{payment-service,user-service}` |
+| payment, user | C# (.NET 10) | `services/{payment-service,user-service}` |
 | order | TypeScript (Node 22, strict) | `services/order-service` |
 
 Infra: MiniStack (`AWS_ENDPOINT_URL=http://ministack:4566`), SNS→SQS+DLQ, S3, Secrets Manager, PostgreSQL 16 por serviço, Terraform em `infra/terraform`.

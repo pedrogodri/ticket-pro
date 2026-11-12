@@ -1,7 +1,7 @@
 # ADR-0008: Linguagem por serviço
 
 - **Data**: 2026-11-12
-- **Status**: Aceito
+- **Status**: Aceito — versão do .NET substituída por [ADR-0018](0018-runtime-versions.md)
 - **Decisores**: Grupo
 - **Tags**: organização, linguagens
 

@@ -121,7 +121,7 @@ services/auth-service/
 └── pom.xml (+ mvnw), Makefile, Dockerfile, compose.yaml, .env.example, README.md
 ```
 
-### 2.3 C# (payment-service, user-service), .NET 8
+### 2.3 C# (payment-service, user-service), .NET 10
 
 ```
 services/payment-service/
