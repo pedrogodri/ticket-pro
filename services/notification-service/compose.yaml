@@ -1,0 +1,15 @@
+# notification-service: internal only (no published ports). Included by the root docker-compose.yml.
+services:
+  notification-service:
+    build: .
+    env_file: .env.example
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "/notification-service", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  backend:
+    name: ticketpro-backend
