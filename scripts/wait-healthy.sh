@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Waits until the compose project is ready:
-#   - every running container that defines a healthcheck reports "healthy";
+#   - every service declared in the compose config has a container;
+#   - every long-running container is running, and healthy when it defines a healthcheck;
 #   - every one-shot job (ONE_SHOT_SERVICES) has exited with code 0.
+# A stopped or crashed long-running service fails the check (it is not silently skipped).
 # Usage: scripts/wait-healthy.sh [timeout_seconds=180]
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -23,16 +25,25 @@ while :; do
     esac
   done
 
-  while IFS= read -r id; do
-    [ -n "$id" ] || continue
-    status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id")
-    name=$(docker inspect -f '{{.Name}}' "$id")
-    case "$status" in
-      healthy|none) ;;
-      unhealthy) echo "unhealthy: ${name#/}"; docker logs --tail 30 "$id" >&2; exit 1 ;;
-      *) pending+=("${name#/}") ;;
-    esac
-  done < <(docker compose ps -q)
+  for svc in $(docker compose config --services); do
+    case " $ONE_SHOT_SERVICES " in *" $svc "*) continue ;; esac
+    ids="$(docker compose ps -aq "$svc" 2>/dev/null || true)"
+    [ -n "$ids" ] || { pending+=("$svc (no container)"); continue; }
+    for id in $ids; do
+      state=$(docker inspect -f '{{.State.Status}}' "$id")
+      case "$state" in
+        running) ;;
+        created|restarting) pending+=("$svc ($state)"); continue ;;
+        *) echo "service not running: $svc ($state)"; docker logs --tail 30 "$id" >&2; exit 1 ;;
+      esac
+      status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id")
+      case "$status" in
+        healthy|none) ;;
+        unhealthy) echo "unhealthy: $svc"; docker logs --tail 30 "$id" >&2; exit 1 ;;
+        *) pending+=("$svc ($status)") ;;
+      esac
+    done
+  done
 
   [ "${#pending[@]}" -eq 0 ] && { echo "all containers healthy"; exit 0; }
   [ "$(date +%s)" -ge "$deadline" ] && { echo "timeout waiting for: ${pending[*]}"; exit 1; }
