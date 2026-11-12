@@ -59,15 +59,22 @@ else
   fail S1-filter "inventory got $(echo "$inv" | count)/$(echo "$inv2" | count), payment got $(echo "$pay" | count)/$(echo "$pay2" | count) (want 1/0 and 0/1)"
 fi
 
-# S2 body format without raw delivery
-body=$(echo "$inv" | jq -r '.Messages[0].Body // empty')
+# S2 body format without raw delivery (temporary subscription; real ones use raw delivery)
+env_q=$(awsl sqs create-queue --queue-name spike-envelope | jq -r '.QueueUrl')
+env_arn=$(awsl sqs get-queue-attributes --queue-url "$env_q" --attribute-names QueueArn | jq -r '.Attributes.QueueArn')
+env_sub=$(awsl sns subscribe --topic-arn "$ORDERS_TOPIC_ARN" --protocol sqs --notification-endpoint "$env_arn" | jq -r '.SubscriptionArn')
+publish "$ORDERS_TOPIC_ARN" OrderCreated >/dev/null
+env_msg=$(recv "$env_q")
+body=$(echo "$env_msg" | jq -r '.Messages[0].Body // empty')
 if echo "$body" | jq -e '.Type == "Notification" and (.Message | fromjson | .type == "OrderCreated")' >/dev/null 2>&1; then
   attrs_in_sns=$(echo "$body" | jq -r '.MessageAttributes.type.Value // "absent"')
-  attrs_in_sqs=$(echo "$inv" | jq -r '.Messages[0].MessageAttributes.type.StringValue // "absent"')
+  attrs_in_sqs=$(echo "$env_msg" | jq -r '.Messages[0].MessageAttributes.type.StringValue // "absent"')
   pass "S2-body (SNS envelope; type attr in SNS body: $attrs_in_sns; in SQS attrs: $attrs_in_sqs)"
 else
   fail S2-body "unexpected body: ${body:0:200}"
 fi
+awsl sns unsubscribe --subscription-arn "$env_sub" >/dev/null 2>&1
+awsl sqs delete-queue --queue-url "$env_q" >/dev/null 2>&1
 drain "$INV_Q"; drain "$PAY_Q"
 
 # S3 raw message delivery on a temporary subscription
