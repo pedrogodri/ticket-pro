@@ -151,7 +151,7 @@ gen_contracts
 # ---------- apply or compare ----------
 # Destinations owned by this script: every generated tree, plus any existing vendored tree (so a target
 # removed from the config or a library with no sources is reported/cleaned too).
-dests="$( { (cd "$work" && find services -name .vendored.json); (cd "$root" && find services -name .vendored.json 2>/dev/null); } \
+dests="$( { (cd "$work" && find services -name .vendored.json); (cd "$root" && find services -name .vendored.json -not -path "*/bin/*" -not -path "*/obj/*" -not -path "*/node_modules/*" -not -path "*/target/*" 2>/dev/null); } \
   | xargs -n1 dirname 2>/dev/null | LC_ALL=C sort -u)"
 
 status=0

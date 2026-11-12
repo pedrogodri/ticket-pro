@@ -89,6 +89,11 @@ check "5. contracts .vendored.json source" sh -c "jq -e '.source == \"contracts\
 sync >/dev/null 2>&1
 check "6. second sync leaves no diff" sh -c "test -z \"\$(cd '$fx' && git status --porcelain)\""
 check "7. --check passes when in sync" sync --check
+mkdir -p "$fx/services/b/src/B/bin/Debug/Platform" "$fx/services/a/node_modules/x"
+cp "$fx/services/b/src/B/Platform/.vendored.json" "$fx/services/b/src/B/bin/Debug/Platform/.vendored.json"
+echo "{}" > "$fx/services/a/node_modules/x/.vendored.json"
+check "7. build outputs (bin/obj/node_modules/target) are ignored" sync --check
+rm -rf "$fx/services/b/src/B/bin" "$fx/services/a/node_modules"
 
 # ---------- drift detection ----------
 printf ' ' >> "$go_copy"
