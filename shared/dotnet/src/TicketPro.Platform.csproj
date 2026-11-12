@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Build/test project of the shared .NET platform (ADR-0017). Services never reference it:
+       scripts/sync-shared.sh copies src/**/*.cs into services/<svc>/src/<Project>/Platform/. -->
+  <PropertyGroup>
+    <RootNamespace>TicketPro.Platform</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="4.0.100.22" />
+    <PackageReference Include="AWSSDK.SQS" Version="4.0.100.21" />
+    <PackageReference Include="JsonSchema.Net" Version="9.5.0" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+  </ItemGroup>
+</Project>

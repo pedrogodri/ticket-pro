@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TicketPro.Platform.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TicketPro.Platform.Tests/TicketPro.Platform.Tests.csproj" />
+  </Folder>
+</Solution>

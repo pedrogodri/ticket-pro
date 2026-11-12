@@ -1,0 +1,170 @@
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
+using Npgsql;
+
+namespace TicketPro.Platform;
+
+/// <summary>Outbox relay tuning (OUTBOX_* environment variables, RFC 0003 §5.1).</summary>
+public sealed class OutboxRelayOptions
+{
+    public int BatchSize { get; set; } = 50;
+    public TimeSpan PollInterval { get; set; } = TimeSpan.FromMilliseconds(200);
+    public TimeSpan MaxBackoff { get; set; } = TimeSpan.FromSeconds(30);
+    /// <summary>Hides claimed rows from other relays while they are published outside a transaction.</summary>
+    public TimeSpan ClaimLease { get; set; } = TimeSpan.FromSeconds(30);
+}
+
+/// <summary>Publishes pending outbox rows (ADR-0005, RFC 0003 §5.3). Safe in every replica (SKIP LOCKED + lease).</summary>
+public sealed partial class OutboxRelay(NpgsqlDataSource dataSource, IOutboxPublisher publisher, OutboxRelayOptions options, ILogger<OutboxRelay> logger)
+{
+    private int _brokerUp = 1;
+
+    /// <summary>Whether the last publish attempt succeeded (readiness: broker up|degraded).</summary>
+    public bool BrokerUp => Volatile.Read(ref _brokerUp) == 1;
+
+    private sealed record Row(long Id, string TopicArn, string? Traceparent, int Attempts, Envelope Envelope);
+
+    /// <summary>Claims one batch and publishes it in id order. On the first publish failure the row is
+    /// rescheduled with backoff, the rest of the batch is released, and the error is rethrown.</summary>
+    public async Task<int> RunOnceAsync(CancellationToken ct)
+    {
+        var rows = await ClaimAsync(ct);
+        var published = 0;
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            try
+            {
+                await publisher.PublishAsync(row.TopicArn, row.Envelope, row.Traceparent, ct);
+            }
+            catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                SetBroker(false, e);
+                await RescheduleAsync(row, e);
+                await ReleaseAsync(rows.Skip(i + 1).Select(r => r.Id).ToArray());
+                throw;
+            }
+            await ExecAsync("UPDATE outbox SET published_at = now(), last_error = NULL WHERE id = $1", ct, row.Id);
+            SetBroker(true, null);
+            published++;
+            LogPublished(logger, row.Envelope.MessageId, row.Envelope.Type, row.Envelope.Version, row.Envelope.CorrelationId);
+        }
+        return published;
+    }
+
+    /// <summary>Publishes until cancelled: PollInterval between batches, backoff after failures.</summary>
+    public async Task RunAsync(CancellationToken ct)
+    {
+        var failures = 0;
+        while (!ct.IsCancellationRequested)
+        {
+            var wait = options.PollInterval;
+            try
+            {
+                var published = await RunOnceAsync(ct);
+                failures = 0;
+                if (published == options.BatchSize)
+                {
+                    wait = TimeSpan.Zero; // full batch: keep draining
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception e)
+            {
+                LogRelayError(logger, e.Message);
+                wait = Backoff.Delay(failures++, Backoff.DefaultBase, options.MaxBackoff, Random.Shared.NextDouble);
+            }
+            try
+            {
+                await Task.Delay(wait, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    private async Task<List<Row>> ClaimAsync(CancellationToken ct)
+    {
+        await using var cmd = dataSource.CreateCommand("""
+            UPDATE outbox SET next_attempt_at = now() + ($2::bigint * interval '1 millisecond')
+            WHERE id IN (
+                SELECT id FROM outbox
+                WHERE published_at IS NULL AND next_attempt_at <= now()
+                ORDER BY id LIMIT $1
+                FOR UPDATE SKIP LOCKED)
+            RETURNING id, message_id::text, topic_arn, type, version, correlation_id::text, traceparent,
+                      payload::text, occurred_at, attempts
+            """);
+        cmd.Parameters.Add(new NpgsqlParameter { Value = options.BatchSize });
+        cmd.Parameters.Add(new NpgsqlParameter { Value = (long)options.ClaimLease.TotalMilliseconds });
+        var rows = new List<Row>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            using var payload = JsonDocument.Parse(r.GetString(7));
+            var envelope = new Envelope(r.GetString(1), r.GetString(5), r.GetString(3), r.GetInt32(4),
+                r.GetFieldValue<DateTimeOffset>(8), payload.RootElement.Clone());
+            rows.Add(new Row(r.GetInt64(0), r.GetString(2), r.IsDBNull(6) ? null : r.GetString(6), r.GetInt32(9), envelope));
+        }
+        rows.Sort((a, b) => a.Id.CompareTo(b.Id)); // RETURNING has no order
+        return rows;
+    }
+
+    private Task RescheduleAsync(Row row, Exception cause)
+    {
+        var delay = Backoff.Delay(row.Attempts + 1, Backoff.DefaultBase, options.MaxBackoff, Random.Shared.NextDouble);
+        return ExecAsync("""
+            UPDATE outbox SET attempts = attempts + 1, last_error = $2,
+                   next_attempt_at = now() + ($3::bigint * interval '1 millisecond')
+            WHERE id = $1
+            """, CancellationToken.None, row.Id, cause.Message, (long)delay.TotalMilliseconds);
+    }
+
+    private Task ReleaseAsync(long[] ids) => ids.Length == 0
+        ? Task.CompletedTask
+        : ExecAsync("UPDATE outbox SET next_attempt_at = now() WHERE id = ANY($1)", CancellationToken.None, ids);
+
+    private async Task ExecAsync(string sql, CancellationToken ct, params object[] args)
+    {
+        await using var cmd = dataSource.CreateCommand(sql);
+        foreach (var a in args)
+        {
+            cmd.Parameters.Add(new NpgsqlParameter { Value = a });
+        }
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    // One log line per broker state transition (RFC 0003 §5.3).
+    private void SetBroker(bool up, Exception? cause)
+    {
+        if (Interlocked.Exchange(ref _brokerUp, up ? 1 : 0) == (up ? 1 : 0))
+        {
+            return;
+        }
+        if (up)
+        {
+            LogBrokerUp(logger);
+        }
+        else
+        {
+            LogBrokerDown(logger, cause?.Message ?? "");
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "message_published messageId={MessageId} type={Type} version={Version} correlationId={CorrelationId}")]
+    private static partial void LogPublished(ILogger logger, string messageId, string type, int version, string correlationId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "broker_up")]
+    private static partial void LogBrokerUp(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "broker_down error={Error}")]
+    private static partial void LogBrokerDown(ILogger logger, string error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "outbox_relay_error error={Error}")]
+    private static partial void LogRelayError(ILogger logger, string error);
+}
