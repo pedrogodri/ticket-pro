@@ -1,0 +1,25 @@
+// Package retry implements the shared exponential backoff with full jitter (RFC 0003 §5.2).
+package retry
+
+import "time"
+
+// Default backoff parameters (RFC 0003 §5.2).
+const (
+	DefaultBase = 200 * time.Millisecond
+	DefaultCap  = 30 * time.Second
+)
+
+// Delay returns random(0, min(cap, base·2^attempt)) using rnd ∈ [0,1). attempt starts at 0.
+func Delay(attempt int, base, cap time.Duration, rnd func() float64) time.Duration {
+	if attempt < 0 {
+		attempt = 0
+	}
+	limit := cap
+	// base·2^attempt overflows quickly; stop doubling once the cap is reached.
+	if attempt < 62 {
+		if d := base << attempt; d > 0 && d < cap && d>>attempt == base {
+			limit = d
+		}
+	}
+	return time.Duration(rnd() * float64(limit))
+}
