@@ -20,9 +20,10 @@ Infra: MiniStack (`AWS_ENDPOINT_URL=http://ministack:4566`), SNS→SQS+DLQ, S3, 
 | Lint / typecheck / testes de um serviço | `cd services/<svc> && make lint typecheck test` |
 | Testes de integração | `cd services/<svc> && make test-integration` |
 | Sincronizar libs/contratos vendorizados | `scripts/sync-shared.sh` (CI: `--check`) |
-| Verificar infra AWS / portas / autonomia | `scripts/verify-infra.sh`, `scripts/check-ports.sh`, `scripts/check-autonomy.sh services/<svc>` |
+| Verificar infra AWS / bancos / portas / autonomia | `scripts/verify-infra.sh`, `scripts/verify-platform.sh`, `scripts/check-ports.sh`, `scripts/check-autonomy.sh services/<svc>` |
+| Testes das libs de plataforma | `make -C shared/go test test-integration`, `make -C shared/dotnet test test-integration` |
 
-Todos os 8 serviços têm `Makefile` e `.devcontainer/`. Sem o SDK no PATH, o `make` roda no container da linguagem (`TOOLCHAIN=docker`). `scripts/sync-shared.sh` é criado na F1 (ADR-0017).
+Todos os 8 serviços têm `Makefile` e `.devcontainer/`. Sem o SDK no PATH, o `make` roda no container da linguagem (`TOOLCHAIN=docker`). Bancos: `<db>-db` + job `<svc>-migrate` (Flyway); credenciais de owner só em `db.env.example`.
 
 ## External References
 | Need | File |

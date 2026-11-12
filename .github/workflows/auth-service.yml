@@ -22,4 +22,6 @@ jobs:
           java-version: "21"
           cache: maven
       - run: make lint typecheck test
+      - name: Integration tests (Testcontainers, Postgres + MiniStack)
+        run: make test-integration
       - run: docker build .

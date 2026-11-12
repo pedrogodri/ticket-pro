@@ -123,5 +123,7 @@ As regras completas para devs e agentes de IA estão em [`AGENTS.md`](AGENTS.md)
 |---|---|
 | `scripts/wait-healthy.sh [timeout]` | Espera todos os containers `healthy` e os jobs one-shot com exit 0 |
 | `scripts/verify-infra.sh` | Confere tópicos, filas, DLQs, assinaturas, bucket, segredo e trace no Jaeger |
+| `scripts/verify-platform.sh` | Confere, nos 6 bancos, roles (`_app` sem BYPASSRLS, `_worker` com), tabelas `outbox`/`processed_messages` idênticas e readiness com `db: up` |
+| `scripts/sync-shared.sh [--check]` | Copia `shared/go`, `shared/dotnet` e `contracts/` para os serviços (ADR-0017); `--check` falha se alguma cópia divergir |
 | `scripts/check-ports.sh` | Garante que só o gateway (e o Jaeger) publicam porta |
 | `scripts/check-autonomy.sh services/<svc>` | Copia o serviço para fora do repo, roda `make test` e `docker build`, e confere usuário não-root |

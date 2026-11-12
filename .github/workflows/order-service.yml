@@ -22,4 +22,6 @@ jobs:
           cache: npm
           cache-dependency-path: services/order-service/package-lock.json
       - run: make lint typecheck test
+      - name: Integration tests (Testcontainers, Postgres + MiniStack)
+        run: make test-integration
       - run: docker build .
