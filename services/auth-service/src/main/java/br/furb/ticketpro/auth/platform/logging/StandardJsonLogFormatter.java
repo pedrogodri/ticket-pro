@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.classic.spi.IThrowableProxy;
 import java.time.Instant;
+import java.util.List;
 import org.springframework.boot.json.JsonWriter;
 import org.springframework.boot.logging.structured.StructuredLogFormatter;
 import org.springframework.core.env.Environment;
@@ -14,6 +15,17 @@ import org.springframework.core.env.Environment;
  * logging.structured.format.console} in application.yml.
  */
 public class StandardJsonLogFormatter implements StructuredLogFormatter<ILoggingEvent> {
+
+  private static final List<String> CONTEXT_KEYS =
+      List.of(
+          "correlationId",
+          "traceId",
+          "spanId",
+          "messageId",
+          "type",
+          "version",
+          "orderId",
+          "userId");
 
   private final JsonWriter<ILoggingEvent> writer;
 
@@ -27,6 +39,19 @@ public class StandardJsonLogFormatter implements StructuredLogFormatter<ILogging
                   members.add("service", service);
                   members.add("message", ILoggingEvent::getFormattedMessage);
                   members.add("category", ILoggingEvent::getLoggerName);
+                  // Context from the MDC (correlationId, traceId, spanId, messageId, type, version,
+                  // orderId, userId).
+                  for (String key : CONTEXT_KEYS) {
+                    members.add(key, event -> event.getMDCPropertyMap().get(key)).whenNotNull();
+                  }
+                  // SLF4J key-values (log.atInfo().addKeyValue(...)) keep the message stable
+                  // (padroes §5).
+                  members
+                      .add("fields", ILoggingEvent::getKeyValuePairs)
+                      .whenNotNull()
+                      .whenNot(List::isEmpty)
+                      .usingPairs((pairs, pair) ->
+                          pairs.forEach(kv -> pair.accept(kv.key, String.valueOf(kv.value))));
                   members
                       .add("error", ILoggingEvent::getThrowableProxy)
                       .whenNotNull()

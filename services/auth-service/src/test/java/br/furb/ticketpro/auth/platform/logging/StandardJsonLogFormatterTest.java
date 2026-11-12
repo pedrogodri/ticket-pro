@@ -19,7 +19,13 @@ class StandardJsonLogFormatterTest {
       new StandardJsonLogFormatter(
           new MockEnvironment().withProperty("spring.application.name", "auth-service"));
 
-  private final Logger logger = new LoggerContext().getLogger("br.furb.test");
+  private final Logger logger = loggerWithMdc();
+
+  private static Logger loggerWithMdc() {
+    LoggerContext context = new LoggerContext();
+    context.setMDCAdapter(new ch.qos.logback.classic.util.LogbackMDCAdapter());
+    return context.getLogger("br.furb.test");
+  }
 
   private Map<String, Object> format(Level level, String message, Throwable error) {
     LoggingEvent event = new LoggingEvent(Logger.FQCN, logger, level, message, error, null);
@@ -46,6 +52,20 @@ class StandardJsonLogFormatterTest {
     assertThat(format(Level.DEBUG, "x", null)).containsEntry("level", "debug");
     assertThat(format(Level.INFO, "x", null)).containsEntry("level", "info");
     assertThat(format(Level.ERROR, "x", null)).containsEntry("level", "error");
+  }
+
+  @Test
+  void p06CorrelationAndTraceFromMdc() {
+    LoggingEvent event =
+        new LoggingEvent(Logger.FQCN, logger, Level.INFO, "message_consumed", null, null);
+    event.setMDCPropertyMap(Map.of("correlationId", "c-1", "traceId", "t-1", "spanId", "s-1"));
+    Map<String, Object> line = JsonParserFactory.getJsonParser().parseMap(formatter.format(event));
+    assertThat(line)
+        .containsEntry("correlationId", "c-1")
+        .containsEntry("traceId", "t-1")
+        .containsEntry("spanId", "s-1");
+
+    assertThat(format(Level.INFO, "no_context", null)).doesNotContainKey("correlationId");
   }
 
   @Test
