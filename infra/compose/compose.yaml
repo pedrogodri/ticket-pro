@@ -15,11 +15,12 @@ services:
       retries: 20
       start_period: 5s
 
-  # Applies infra/terraform with ephemeral state (ADR-0011). MiniStack keeps SNS/SQS in memory
-  # but S3/Secrets Manager survive a container restart, so the job first resets MiniStack to a
-  # clean state and then recreates everything. After restarting MiniStack, re-run it with:
+  # Applies infra/terraform (ADR-0011). Compose re-runs it on every `docker compose up`; with the
+  # state kept in the `tf-state` volume that re-run is a no-op and never touches queued messages.
+  # MiniStack keeps SNS/SQS in memory only: after restarting it, re-run this job so the refresh
+  # recreates the missing resources:
   #   docker compose up -d --force-recreate infra-init
-  # WARNING: this wipes queued messages, receipts and the JWT key (issued tokens become invalid).
+  # `docker compose down -v` drops both MiniStack and the state, so the next `up` starts clean.
   infra-init:
     image: hashicorp/terraform:1.16.7
     depends_on:
@@ -33,11 +34,11 @@ services:
     volumes:
       - ../terraform:/tf:ro
       - tf-plugins:/plugins
+      - tf-state:/state
     working_dir: /work
     entrypoint: ["sh", "-c"]
     command:
       - >-
-        wget -qO- --post-data='' http://ministack:4566/_ministack/reset && echo &&
         rm -rf /work/* && cp -r /tf/. /work &&
         terraform init -input=false -no-color &&
         terraform apply -auto-approve -input=false -no-color &&
@@ -47,6 +48,7 @@ services:
 
 volumes:
   tf-plugins:
+  tf-state:
 
 networks:
   edge:
