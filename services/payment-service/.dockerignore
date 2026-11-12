@@ -5,3 +5,4 @@ tests
 compose.yaml
 Makefile
 README.md
+.devcontainer
