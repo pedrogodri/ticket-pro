@@ -143,3 +143,33 @@ public sealed class CoreTests
         Assert.DoesNotContain("correlationId", plain.ToString(), StringComparison.Ordinal);
     }
 }
+
+public sealed class StructuredLogTests
+{
+    private sealed class State(string format, params (string Key, object? Value)[] values) : IReadOnlyList<KeyValuePair<string, object?>>
+    {
+        private readonly List<KeyValuePair<string, object?>> _items =
+            [.. values.Select(v => new KeyValuePair<string, object?>(v.Key, v.Value)), new("{OriginalFormat}", format)];
+
+        public KeyValuePair<string, object?> this[int index] => _items[index];
+        public int Count => _items.Count;
+        public IEnumerator<KeyValuePair<string, object?>> GetEnumerator() => _items.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public override string ToString() => "interpolated text";
+    }
+
+    // docs/padroes.md §5: "message" is a short stable phrase without data; the data goes in its own fields.
+    [Fact]
+    public void P06_TemplateFieldsBecomeJsonFieldsAndMessageStaysStable()
+    {
+        var formatter = new StandardJsonConsoleFormatter(Options.Create(new StandardJsonFormatterOptions { ServiceName = "payment-service" }));
+        var state = new State("message_published messageId={MessageId} version={Version}", ("MessageId", "m-1"), ("Version", 2));
+        using var writer = new StringWriter();
+        formatter.Write(new LogEntry<State>(LogLevel.Information, "cat", default, state, null, (s, _) => s.ToString()), null, writer);
+
+        using var line = JsonDocument.Parse(writer.ToString());
+        Assert.Equal("message_published", line.RootElement.GetProperty("message").GetString());
+        Assert.Equal("m-1", line.RootElement.GetProperty("messageId").GetString());
+        Assert.Equal("2", line.RootElement.GetProperty("version").GetString());
+    }
+}

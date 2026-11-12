@@ -35,6 +35,8 @@ public sealed class StandardJsonConsoleFormatter : ConsoleFormatter
     {
         ArgumentNullException.ThrowIfNull(textWriter);
         var message = logEntry.Formatter(logEntry.State, logEntry.Exception);
+        var fields = logEntry.State as IReadOnlyList<KeyValuePair<string, object?>>;
+        message = StableMessage(fields) ?? message;
 
         using var buffer = new MemoryStream();
         using (var json = new Utf8JsonWriter(buffer))
@@ -45,7 +47,9 @@ public sealed class StandardJsonConsoleFormatter : ConsoleFormatter
             json.WriteString("service", _options.ServiceName);
             json.WriteString("message", message);
             json.WriteString("category", logEntry.Category);
-            WriteContext(json, scopeProvider);
+            var written = new HashSet<string>(StringComparer.Ordinal) { "timestamp", "level", "service", "message", "category", "error" };
+            WriteFields(json, fields, written);
+            WriteContext(json, scopeProvider, written);
             if (logEntry.Exception is { } ex)
             {
                 json.WriteStartObject("error");
@@ -61,10 +65,43 @@ public sealed class StandardJsonConsoleFormatter : ConsoleFormatter
         textWriter.Write(Environment.NewLine);
     }
 
-    // correlationId (and any other key) from logger scopes; traceId/spanId from the current activity.
-    private static void WriteContext(Utf8JsonWriter json, IExternalScopeProvider? scopeProvider)
+    // Templates follow "<stable_message> key={Key} ...": the message is the text before the first placeholder.
+    private static string? StableMessage(IReadOnlyList<KeyValuePair<string, object?>>? fields)
     {
-        var written = new HashSet<string>(StringComparer.Ordinal);
+        var format = fields?.FirstOrDefault(f => f.Key == "{OriginalFormat}").Value as string;
+        if (format is null)
+        {
+            return null;
+        }
+        var words = format.Split(' ').TakeWhile(w => !w.Contains('{', StringComparison.Ordinal));
+        var stable = string.Join(' ', words).Trim();
+        return stable.Length > 0 ? stable : format;
+    }
+
+    // Template values become camelCase JSON fields (MessageId → messageId).
+    private static void WriteFields(Utf8JsonWriter json, IReadOnlyList<KeyValuePair<string, object?>>? fields, HashSet<string> written)
+    {
+        if (fields is null)
+        {
+            return;
+        }
+        foreach (var (key, value) in fields)
+        {
+            if (key == "{OriginalFormat}" || key.Length == 0 || value is null)
+            {
+                continue;
+            }
+            var name = char.ToLowerInvariant(key[0]) + key[1..];
+            if (written.Add(name))
+            {
+                json.WriteString(name, Convert.ToString(value, CultureInfo.InvariantCulture));
+            }
+        }
+    }
+
+    // correlationId (and any other key) from logger scopes; traceId/spanId from the current activity.
+    private static void WriteContext(Utf8JsonWriter json, IExternalScopeProvider? scopeProvider, HashSet<string> written)
+    {
         scopeProvider?.ForEachScope((scope, w) =>
         {
             if (scope is IEnumerable<KeyValuePair<string, object?>> pairs)
@@ -78,7 +115,7 @@ public sealed class StandardJsonConsoleFormatter : ConsoleFormatter
                 }
             }
         }, json);
-        if (System.Diagnostics.Activity.Current is { } activity)
+        if (System.Diagnostics.Activity.Current is { } activity && written.Add("traceId"))
         {
             json.WriteString("traceId", activity.TraceId.ToString());
             json.WriteString("spanId", activity.SpanId.ToString());
