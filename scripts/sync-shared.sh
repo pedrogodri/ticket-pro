@@ -180,6 +180,10 @@ fi
 if [ -f "$conf" ]; then
   while read -r kind svc _; do
     if [ "$kind" = "go" ] && [ -f "$root/services/$svc/go.mod" ] && [ -d "$root/services/$svc/internal/platform" ]; then
+      # Pin the library's module versions first, so tidy never picks newer (unvetted) releases.
+      requires="$(awk '/^require \(/{b=1;next} b&&/^\)/{b=0} b&&NF>=2{print "-require=" $1 "@" $2} /^require [^(]/{print "-require=" $2 "@" $3}' "$root/shared/go/go.mod")"
+      # shellcheck disable=SC2086
+      [ -z "$requires" ] || run_go "$root/services/$svc" go mod edit $requires
       run_go "$root/services/$svc" go mod tidy
     fi
   done < "$conf"
