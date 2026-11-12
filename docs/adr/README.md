@@ -23,3 +23,4 @@ Formato: [MADR](https://adr.github.io/madr/). ADRs são imutáveis: para mudar u
 | [0017](0017-vendored-platform-libraries-and-contracts.md) | Libs de plataforma e contratos vendorizados em cada serviço | Aceito |
 | [0018](0018-runtime-versions.md) | Versões de runtime (Go 1.25, Java 21, .NET 10, Node 22) | Aceito |
 | [0019](0019-persistent-terraform-state-volume.md) | State do Terraform persistido em volume | Aceito |
+| [0020](0020-database-roles-and-data-networks.md) | Roles de banco owner/app/worker e rede de dados isolada por serviço | Aceito |
