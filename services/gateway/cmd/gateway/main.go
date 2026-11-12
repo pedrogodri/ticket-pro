@@ -4,7 +4,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,12 +20,11 @@ func main() {
 
 	cfg, err := app.LoadConfig(os.Getenv)
 	if err != nil {
-		slog.New(slog.NewJSONHandler(os.Stderr, nil)).Error("invalid_config", "error", err.Error())
+		app.NewLogger(os.Stderr, app.Config{ServiceName: "gateway"}).Error("invalid_config", "error", err.Error())
 		os.Exit(1)
 	}
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel})).
-		With("service", cfg.ServiceName)
+	logger := app.NewLogger(os.Stdout, cfg)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
