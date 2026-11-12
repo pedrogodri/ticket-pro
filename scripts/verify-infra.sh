@@ -102,5 +102,23 @@ else
   fail "secret ingressoja/auth/jwt-signing-key missing or malformed"
 fi
 
+# --- observability: a span sent to the collector shows up in Jaeger --------------
+TELEMETRYGEN_IMAGE="${TELEMETRYGEN_IMAGE:-ghcr.io/open-telemetry/opentelemetry-collector-contrib/telemetrygen:v0.164.0}"
+smoke="f0-smoke"
+if docker run --rm --network "$INGRESSOJA_NETWORK" "$TELEMETRYGEN_IMAGE" traces \
+  --otlp-endpoint otel-collector:4317 --otlp-insecure --service "$smoke" --traces 1 >/dev/null 2>&1; then
+  found=no
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if docker run --rm --network "$INGRESSOJA_NETWORK" busybox:1.37.0 \
+        wget -qO- http://jaeger:16686/api/services 2>/dev/null | jq -e --arg s "$smoke" '.data | index($s)' >/dev/null; then
+      found=yes; break
+    fi
+    sleep 2
+  done
+  [ "$found" = yes ] && pass "trace from $smoke visible in Jaeger" || fail "$smoke not found in Jaeger"
+else
+  fail "could not send OTLP trace to otel-collector:4317"
+fi
+
 [ "$failures" -eq 0 ] || { echo "$failures check(s) failed"; exit 1; }
 echo "all checks passed"

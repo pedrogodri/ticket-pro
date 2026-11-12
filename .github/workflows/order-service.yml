@@ -1,0 +1,25 @@
+name: order-service
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/order-service/**", ".github/workflows/order-service.yml"]
+  pull_request:
+    paths: ["services/order-service/**", ".github/workflows/order-service.yml"]
+
+defaults:
+  run:
+    working-directory: services/order-service
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/order-service/package-lock.json
+      - run: make lint typecheck test
+      - run: docker build .

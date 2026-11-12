@@ -46,6 +46,29 @@ services:
     networks: [backend]
     restart: "no"
 
+  # Observability (ADR-0012): services export OTLP to the collector, which forwards to Jaeger.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.164.0
+    command: ["--config=/etc/otelcol/collector.yaml"]
+    volumes:
+      - ../otel/collector.yaml:/etc/otelcol/collector.yaml:ro
+    depends_on:
+      - jaeger
+    networks: [backend]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.75.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI (operations tool, ADR-0012)
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:14269/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
 volumes:
   tf-plugins:
   tf-state:

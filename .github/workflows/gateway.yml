@@ -1,0 +1,23 @@
+name: gateway
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/gateway/**", ".github/workflows/gateway.yml"]
+  pull_request:
+    paths: ["services/gateway/**", ".github/workflows/gateway.yml"]
+
+defaults:
+  run:
+    working-directory: services/gateway
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/gateway/go.mod
+      - run: make lint typecheck test
+      - run: docker build .

@@ -20,8 +20,9 @@ Infra: MiniStack (`AWS_ENDPOINT_URL=http://ministack:4566`), SNS→SQS+DLQ, S3, 
 | Lint / typecheck / testes de um serviço | `cd services/<svc> && make lint typecheck test` |
 | Testes de integração | `cd services/<svc> && make test-integration` |
 | Sincronizar libs/contratos vendorizados | `scripts/sync-shared.sh` (CI: `--check`) |
+| Verificar infra AWS / portas / autonomia | `scripts/verify-infra.sh`, `scripts/check-ports.sh`, `scripts/check-autonomy.sh services/<svc>` |
 
-Os `Makefile` dos serviços e `scripts/sync-shared.sh` ainda não existem: crie-os seguindo `docs/padroes.md` §1.2 e ADR-0017.
+Serviços com `Makefile` hoje: gateway, auth-service, payment-service, order-service. `scripts/sync-shared.sh` é criado na F1 (ADR-0017).
 
 ## External References
 | Need | File |
