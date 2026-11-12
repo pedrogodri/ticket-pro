@@ -13,4 +13,4 @@ logging:
     root: ${LOG_LEVEL:info}
   structured:
     format:
-      console: ecs
+      console: br.furb.ingressoja.auth.platform.logging.StandardJsonLogFormatter
