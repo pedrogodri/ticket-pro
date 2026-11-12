@@ -10,6 +10,7 @@ FROM eclipse-temurin:21-jre-alpine
 RUN addgroup -S app -g 10001 && adduser -S app -u 10001 -G app
 WORKDIR /app
 COPY --from=build /src/target/auth-service.jar /app/app.jar
+COPY contracts /app/contracts
 USER 10001:10001
 EXPOSE 8080
 HEALTHCHECK --interval=5s --timeout=3s --retries=20 --start-period=20s \

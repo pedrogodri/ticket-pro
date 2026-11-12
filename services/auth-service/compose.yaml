@@ -1,9 +1,13 @@
-# auth-service: internal only (no published ports). Included by the root docker-compose.yml.
+# auth-service + its own database (ADR-0004, ADR-0020). Included by the root docker-compose.yml.
+# The database lives only on ticketpro-auth-service-data: no other service can reach it.
 services:
   auth-service:
     build: .
     env_file: .env.example
-    networks: [backend]
+    networks: [backend, auth-service-data]
+    depends_on:
+      auth-service-migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live >/dev/null || exit 1"]
       interval: 5s
@@ -11,6 +15,35 @@ services:
       retries: 20
       start_period: 20s
 
+  auth-service-migrate:
+    image: flyway/flyway:13.11.1-alpine
+    command: migrate
+    env_file: db.env.example
+    volumes:
+      - ./migrations:/flyway/sql:ro
+    networks: [auth-service-data]
+    depends_on:
+      auth-db:
+        condition: service_healthy
+
+  auth-db:
+    image: postgres:16-alpine
+    env_file: db.env.example
+    volumes:
+      - auth-data:/var/lib/postgresql/data
+    networks: [auth-service-data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth_owner -d auth"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
 networks:
   backend:
     name: ticketpro-backend
+  auth-service-data:
+    name: ticketpro-auth-service-data
+    internal: true
+
+volumes:
+  auth-data:

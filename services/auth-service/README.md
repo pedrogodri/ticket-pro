@@ -4,7 +4,7 @@ Credenciais, emissão de JWT, refresh tokens e JWKS do Ticket Pro, em Java 21 co
 
 **Dono:** Felipe.
 
-**Estado:** esqueleto. Hoje só tem config validada, logs JSON e health checks. A plataforma Java, o banco e o relay chegam na F1. Cadastro, login e chave no Secrets Manager chegam na F2.
+**Estado:** plataforma pronta (F1): camada `platform/` em Java (envelope, outbox + relay, consumidor idempotente), banco com migrations Flyway e readiness com `db`/`broker`. Cadastro, login e chave no Secrets Manager chegam na F2.
 
 ## Responsabilidades
 
@@ -52,11 +52,19 @@ O banco é `auth`, no container `auth-db`. Tabelas: `credentials` (`email UNIQUE
 | `SERVICE_NAME` | sim | `auth-service` |
 | `PORT` | sim | `8080` |
 | `LOG_LEVEL` | sim | `debug` \| `info` \| `warn` \| `error` |
+| `DATABASE_URL` | sim | `postgres://auth_app:…@auth-db:5432/auth` (API, RLS) |
+| `DATABASE_WORKER_URL` | sim | role `auth_worker` (relay, consumidores, login/registro) |
+| `AUTH_TOPIC_ARN` | sim | `arn:aws:sns:us-east-1:000000000000:ticketpro-auth` |
+| `AWS_REGION` | sim | `us-east-1` (`AWS_ENDPOINT_URL` aponta para o MiniStack) |
+| `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_MAX_BACKOFF_MS`, `OUTBOX_CLAIM_LEASE_MS`, `HTTP_CLIENT_TIMEOUT_MS` | não | 200, 50, 30000, 30000, 3000 (RFC 0003 §5.1) |
+
+O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, só desenvolvimento). `contracts/` é cópia gerada por `scripts/sync-shared.sh`: não edite.
 
 ## Comandos
 
 ```bash
-make test        # JUnit 5
+make test        # JUnit 5 (unitários)
+make test-integration  # *IT com Testcontainers (P07–P15)
 make lint        # Spotless (google-java-format)
 make typecheck   # compila com warnings como erro
 make run         # sobe só este serviço

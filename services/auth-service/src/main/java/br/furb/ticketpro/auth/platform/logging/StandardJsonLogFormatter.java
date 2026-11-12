@@ -44,10 +44,11 @@ public class StandardJsonLogFormatter implements StructuredLogFormatter<ILogging
                   for (String key : CONTEXT_KEYS) {
                     members.add(key, event -> event.getMDCPropertyMap().get(key)).whenNotNull();
                   }
-                  // SLF4J key-values (log.atInfo().addKeyValue(...)) keep the message stable
-                  // (padroes §5).
+                  // SLF4J key-values (log.atInfo().addKeyValue(...)) become flat fields, so the
+                  // message
+                  // stays stable (padroes §5).
                   members
-                      .add("fields", ILoggingEvent::getKeyValuePairs)
+                      .from(ILoggingEvent::getKeyValuePairs)
                       .whenNotNull()
                       .whenNot(List::isEmpty)
                       .usingPairs((pairs, pair) ->

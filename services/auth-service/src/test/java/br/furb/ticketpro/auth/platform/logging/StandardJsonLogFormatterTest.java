@@ -69,6 +69,21 @@ class StandardJsonLogFormatterTest {
   }
 
   @Test
+  void keyValuesBecomeFlatFieldsAndMessageStaysStable() {
+    LoggingEvent event =
+        new LoggingEvent(Logger.FQCN, logger, Level.INFO, "message_published", null, null);
+    event.addKeyValuePair(new org.slf4j.event.KeyValuePair("messageId", "m-1"));
+    event.addKeyValuePair(new org.slf4j.event.KeyValuePair("version", 2));
+    String json = formatter.format(event);
+    Map<String, Object> line = JsonParserFactory.getJsonParser().parseMap(json);
+    assertThat(line)
+        .containsEntry("message", "message_published")
+        .containsEntry("messageId", "m-1")
+        .containsEntry("version", "2")
+        .doesNotContainKey("fields");
+  }
+
+  @Test
   void includesErrorKindAndMessage() {
     Map<String, Object> line =
         format(Level.ERROR, "server_failed", new IllegalStateException("boom"));
