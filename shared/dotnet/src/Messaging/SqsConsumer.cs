@@ -154,7 +154,16 @@ public sealed partial class SqsConsumer
         {
             return await TransientAsync(message, new NpgsqlException("database unavailable"), ct);
         }
-        await using var transaction = await connection.BeginTransactionAsync(ct);
+        NpgsqlTransaction transaction;
+        try
+        {
+            transaction = await connection.BeginTransactionAsync(ct);
+        }
+        catch (Exception e) when (e is NpgsqlException or InvalidOperationException or TimeoutException)
+        {
+            return await TransientAsync(message, e, ct);
+        }
+        await using var transactionScope = transaction;
         try
         {
             if (!await ProcessedMessages.RecordAsync(connection, transaction, _options.Name, envelope.MessageId, ct))
@@ -222,7 +231,7 @@ public sealed partial class SqsConsumer
 
     private async Task<ConsumeOutcome> PoisonAsync(Message message, PoisonMessageException cause, CancellationToken ct)
     {
-        LogRejected(_logger, cause is UnsupportedVersionException ? "unsupported_version" : "invalid_message", cause.Message);
+        LogRejected(_logger, true, cause is UnsupportedVersionException ? "unsupported_version" : "invalid_message", cause.Message);
         await ChangeVisibilityAsync(message, 0, ct); // reach maxReceiveCount fast → DLQ via redrive
         return ConsumeOutcome.Poison;
     }
@@ -244,7 +253,7 @@ public sealed partial class SqsConsumer
         {
             await _sqs.DeleteMessageAsync(_options.QueueUrl, message.ReceiptHandle, ct);
         }
-        catch (AmazonServiceException e)
+        catch (Exception e) when (e is not OperationCanceledException)
         {
             LogAckFailed(_logger, e.Message); // committed but not acked: the redelivery is a duplicate
         }
@@ -256,7 +265,7 @@ public sealed partial class SqsConsumer
         {
             await _sqs.ChangeMessageVisibilityAsync(_options.QueueUrl, message.ReceiptHandle, seconds, ct);
         }
-        catch (AmazonServiceException e)
+        catch (Exception e) when (e is not OperationCanceledException)
         {
             LogVisibilityFailed(_logger, e.Message);
         }
@@ -288,8 +297,8 @@ public sealed partial class SqsConsumer
     [LoggerMessage(Level = LogLevel.Information, Message = "stale_event")]
     private static partial void LogStale(ILogger logger);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "message_rejected poison=true reason={Reason} error={Error}")]
-    private static partial void LogRejected(ILogger logger, string reason, string error);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "message_rejected poison={Poison} reason={Reason} error={Error}")]
+    private static partial void LogRejected(ILogger logger, bool poison, string reason, string error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "message_retry error={Error} receiveCount={ReceiveCount} visibilityS={Seconds}")]
     private static partial void LogRetry(ILogger logger, string error, int receiveCount, int seconds);

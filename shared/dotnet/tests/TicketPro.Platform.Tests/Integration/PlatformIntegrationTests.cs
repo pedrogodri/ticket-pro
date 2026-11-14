@@ -207,6 +207,33 @@ public sealed class PlatformIntegrationTests
         Assert.All(publisher.Calls.Values, n => Assert.Equal(1, n));
     }
 
+    private sealed class SlowPublisher(TimeSpan delay) : IOutboxPublisher
+    {
+        public Task PublishAsync(string topicArn, Envelope envelope, string? traceparent, CancellationToken ct) => Task.Delay(delay, ct);
+    }
+
+    // Review finding: a slow broker must not let a batch outlive its claim lease; the relay stops at half the
+    // lease and releases the rest of the batch.
+    [Fact]
+    public async Task P16_RelayStopsBeforeTheLeaseExpires()
+    {
+        await using var ds = await Containers.PostgresAsync();
+        for (var i = 0; i < 5; i++)
+        {
+            await EnqueueAsync(ds, TopicArn, NewEnvelope());
+        }
+        var relay = new OutboxRelay(ds, new SlowPublisher(TimeSpan.FromMilliseconds(150)), new OutboxRelayOptions
+        {
+            BatchSize = 5,
+            PollInterval = TimeSpan.FromMilliseconds(1),
+            MaxBackoff = TimeSpan.FromSeconds(1),
+            ClaimLease = TimeSpan.FromMilliseconds(400),
+        }, NullLogger<OutboxRelay>.Instance);
+        var published = await relay.RunOnceAsync(CancellationToken.None);
+        Assert.InRange(published, 1, 4);
+        Assert.Equal(5 - published, await Containers.CountAsync(ds, "SELECT count(*) FROM outbox WHERE published_at IS NULL AND next_attempt_at <= now()"));
+    }
+
     // ---------- consumer ----------
 
     private sealed class EffectHandler(bool failFirst = false, Exception? result = null) : IMessageHandler

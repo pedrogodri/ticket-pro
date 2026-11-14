@@ -170,6 +170,40 @@ public sealed class StructuredLogTests
         using var line = JsonDocument.Parse(writer.ToString());
         Assert.Equal("message_published", line.RootElement.GetProperty("message").GetString());
         Assert.Equal("m-1", line.RootElement.GetProperty("messageId").GetString());
-        Assert.Equal("2", line.RootElement.GetProperty("version").GetString());
+        Assert.Equal(2, line.RootElement.GetProperty("version").GetInt32());
+    }
+}
+
+public sealed class StructuredLogParityTests
+{
+    private sealed class State(string format, params (string Key, object? Value)[] values) : IReadOnlyList<KeyValuePair<string, object?>>
+    {
+        private readonly List<KeyValuePair<string, object?>> _items =
+            [.. values.Select(v => new KeyValuePair<string, object?>(v.Key, v.Value)), new("{OriginalFormat}", format)];
+
+        public KeyValuePair<string, object?> this[int index] => _items[index];
+        public int Count => _items.Count;
+        public IEnumerator<KeyValuePair<string, object?>> GetEnumerator() => _items.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private static JsonElement Write(State state)
+    {
+        var formatter = new StandardJsonConsoleFormatter(Options.Create(new StandardJsonFormatterOptions { ServiceName = "s" }));
+        using var writer = new StringWriter();
+        formatter.Write(new LogEntry<State>(LogLevel.Warning, "cat", default, state, null, (_, _) => "x"), null, writer);
+        return JsonDocument.Parse(writer.ToString()).RootElement.Clone();
+    }
+
+    // Review findings: the template's error value was dropped, and values were all strings.
+    [Fact]
+    public void ErrorValueAndJsonTypesMatchTheOtherLanguages()
+    {
+        var line = Write(new State("message_rejected poison={Poison} reason={Reason} error={Error} receiveCount={ReceiveCount}",
+            ("Poison", true), ("Reason", "invalid_message"), ("Error", "schema violated"), ("ReceiveCount", 3)));
+        Assert.Equal("message_rejected", line.GetProperty("message").GetString());
+        Assert.Equal("schema violated", line.GetProperty("error").GetString());
+        Assert.Equal(JsonValueKind.True, line.GetProperty("poison").ValueKind);
+        Assert.Equal(3, line.GetProperty("receiveCount").GetInt32());
     }
 }
