@@ -1,7 +1,7 @@
 import { SNSClient } from "@aws-sdk/client-sns";
-import pg from "pg";
 import { loadConfig, type Config } from "./app/config.js";
 import { buildServer } from "./app/server.js";
+import { createPool } from "./platform/db.js";
 import { createLogger } from "./platform/logging.js";
 import { awsClientConfig, SnsPublisher } from "./platform/publisher.js";
 import { OutboxRelay } from "./platform/relay.js";
@@ -19,14 +19,9 @@ try {
 
 // API role (RLS) for requests and readiness; worker role for the relay and, in F2, the consumers.
 // Pools connect lazily: the service starts even if the database is still coming up (readiness says so).
-const appPool = new pg.Pool({
-  connectionString: config.databaseUrl,
-  connectionTimeoutMillis: 2000,
-});
-const workerPool = new pg.Pool({
-  connectionString: config.databaseWorkerUrl,
-  connectionTimeoutMillis: 2000,
-});
+const logger = createLogger(config.serviceName, config.logLevel);
+const appPool = createPool(config.databaseUrl, logger);
+const workerPool = createPool(config.databaseWorkerUrl, logger);
 
 const sns = new SNSClient({
   ...awsClientConfig(config.httpClientTimeoutMs),
@@ -40,12 +35,7 @@ const app = buildServer(config, {
   },
   brokerUp: () => relay.brokerUp,
 });
-const relay = new OutboxRelay(
-  workerPool,
-  new SnsPublisher(sns),
-  config.outbox,
-  createLogger(config.serviceName, config.logLevel),
-);
+const relay = new OutboxRelay(workerPool, new SnsPublisher(sns), config.outbox, logger);
 const stopRelay = new AbortController();
 const relayDone = relay.run(stopRelay.signal);
 
