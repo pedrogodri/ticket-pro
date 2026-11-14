@@ -33,10 +33,17 @@ public sealed partial class OutboxRelay(NpgsqlDataSource dataSource, IOutboxPubl
     /// rescheduled with backoff, the rest of the batch is released, and the error is rethrown.</summary>
     public async Task<int> RunOnceAsync(CancellationToken ct)
     {
+        var started = System.Diagnostics.Stopwatch.StartNew();
         var rows = await ClaimAsync(ct);
         var published = 0;
         for (var i = 0; i < rows.Count; i++)
         {
+            // Stop at half the lease: past it another relay may re-claim rows still being published.
+            if (started.Elapsed >= options.ClaimLease / 2)
+            {
+                await ReleaseAsync(rows.Skip(i).Select(r => r.Id).ToArray());
+                return published;
+            }
             var row = rows[i];
             try
             {
@@ -49,7 +56,16 @@ public sealed partial class OutboxRelay(NpgsqlDataSource dataSource, IOutboxPubl
                 await ReleaseAsync(rows.Skip(i + 1).Select(r => r.Id).ToArray());
                 throw;
             }
-            await ExecAsync("UPDATE outbox SET published_at = now(), last_error = NULL WHERE id = $1", ct, row.Id);
+            try
+            {
+                await ExecAsync("UPDATE outbox SET published_at = now(), last_error = NULL WHERE id = $1", ct, row.Id);
+            }
+            catch (NpgsqlException)
+            {
+                // The row stays leased and is republished later (at-least-once); release the rest now.
+                await ReleaseAsync(rows.Skip(i + 1).Select(r => r.Id).ToArray());
+                throw;
+            }
             SetBroker(true, null);
             published++;
             LogPublished(logger, row.Envelope.MessageId, row.Envelope.Type, row.Envelope.Version, row.Envelope.CorrelationId);

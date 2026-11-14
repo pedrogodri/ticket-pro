@@ -52,7 +52,11 @@ public sealed class StandardJsonConsoleFormatter : ConsoleFormatter
             json.WriteString("service", _options.ServiceName);
             json.WriteString("message", message);
             json.WriteString("category", logEntry.Category);
-            var written = new HashSet<string>(StringComparer.Ordinal) { "timestamp", "level", "service", "message", "category", "error" };
+            var written = new HashSet<string>(StringComparer.Ordinal) { "timestamp", "level", "service", "message", "category" };
+            if (logEntry.Exception is not null)
+            {
+                written.Add("error"); // the exception object wins over a template value
+            }
             WriteFields(json, fields, written);
             WriteContext(json, scopeProvider, written);
             if (logEntry.Exception is { } ex)
@@ -83,6 +87,26 @@ public sealed class StandardJsonConsoleFormatter : ConsoleFormatter
         return stable.Length > 0 ? stable : format;
     }
 
+    // JSON types like the Go/Java/TS loggers: booleans and numbers are not quoted.
+    private static void WriteValue(Utf8JsonWriter json, string name, object value)
+    {
+        switch (value)
+        {
+            case bool b:
+                json.WriteBoolean(name, b);
+                break;
+            case int or long or short or byte:
+                json.WriteNumber(name, Convert.ToInt64(value, CultureInfo.InvariantCulture));
+                break;
+            case double or float or decimal:
+                json.WriteNumber(name, Convert.ToDouble(value, CultureInfo.InvariantCulture));
+                break;
+            default:
+                json.WriteString(name, Convert.ToString(value, CultureInfo.InvariantCulture));
+                break;
+        }
+    }
+
     // Template values become camelCase JSON fields (MessageId → messageId).
     private static void WriteFields(Utf8JsonWriter json, IReadOnlyList<KeyValuePair<string, object?>>? fields, HashSet<string> written)
     {
@@ -99,7 +123,7 @@ public sealed class StandardJsonConsoleFormatter : ConsoleFormatter
             var name = char.ToLowerInvariant(key[0]) + key[1..];
             if (written.Add(name))
             {
-                json.WriteString(name, Convert.ToString(value, CultureInfo.InvariantCulture));
+                WriteValue(json, name, value);
             }
         }
     }
