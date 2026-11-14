@@ -30,6 +30,8 @@ psql_in() { # db, sql
 }
 
 COLUMNS_SQL="SELECT table_name, column_name, data_type, is_nullable, coalesce(column_default,'') FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '%s' ORDER BY 1, 2"
+# Indexes and constraints too: column-level equality misses a dropped UNIQUE, CHECK or partial index.
+SHAPE_SQL="SELECT indexname || ': ' || regexp_replace(indexdef, ' ON public\\.', ' ON ') FROM pg_indexes WHERE schemaname = 'public' AND tablename = '%s' UNION ALL SELECT conname || ': ' || pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid = 'public.%s'::regclass ORDER BY 1"
 
 workdir="$(mktemp -d "${TMPDIR:-/tmp}/verify-platform.XXXXXX")"
 trap 'rm -rf "${workdir:?}"' EXIT
@@ -51,6 +53,10 @@ for entry in $DATABASES; do
     # shellcheck disable=SC2059
     psql_in "$db" "$(printf "$COLUMNS_SQL" "$t")" > "$workdir/$db.$t" 2>/dev/null
     if [ -s "$workdir/$db.$t" ]; then pass "$db: table $t exists"; else fail "$db: table $t missing"; rm -f "$workdir/$db.$t"; fi
+    if [ -s "$workdir/$db.$t" ]; then
+      # shellcheck disable=SC2059
+      psql_in "$db" "$(printf "$SHAPE_SQL" "$t" "$t")" >> "$workdir/$db.$t" 2>/dev/null
+    fi
   done
 
   ready="$(docker run --rm --network "$NETWORK" "$BUSYBOX_IMAGE" wget -qO- -T 5 "http://$svc:8080/health/ready" 2>/dev/null)"

@@ -31,6 +31,8 @@ jobs:
           go-version: "1.25"
       - name: Test the sync script
         run: scripts/tests/sync-shared.test.sh
+      - name: Platform DDL has not drifted (migrations and fixtures)
+        run: scripts/check-platform-ddl.sh
       - name: Vendored copies match their sources (ADR-0017)
         run: scripts/sync-shared.sh --check
 
