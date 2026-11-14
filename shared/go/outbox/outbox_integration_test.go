@@ -241,3 +241,35 @@ func TestP13_ConcurrentRelaysPublishEachRowOnce(t *testing.T) {
 		}
 	}
 }
+
+type slowPublisher struct{ delay time.Duration }
+
+func (p slowPublisher) Publish(context.Context, string, envelope.Envelope, string) error {
+	time.Sleep(p.delay)
+	return nil
+}
+
+// Review finding: a slow (not failing) broker must not let a batch outlive its claim lease, or another
+// replica re-claims rows that are still being published. The relay stops at half the lease and releases
+// the rest of the batch.
+func TestP16_RelayStopsBeforeTheLeaseExpires(t *testing.T) {
+	pool := testenv.Postgres(t)
+	ctx := context.Background()
+	for i := 0; i < 5; i++ {
+		enqueue(t, ctx, pool, topicARN, newEnvelope(t), true)
+	}
+	relay := outbox.NewRelay(outbox.RelayConfig{
+		Pool: pool, Publisher: slowPublisher{150 * time.Millisecond}, BatchSize: 5, PollInterval: time.Millisecond,
+		MaxBackoff: time.Second, ClaimLease: 400 * time.Millisecond, Logger: quiet,
+	})
+	published, err := relay.RunOnce(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if published == 0 || published >= 5 {
+		t.Fatalf("want a partial batch, published %d of 5", published)
+	}
+	if n := testenv.Count(t, pool, "SELECT count(*) FROM outbox WHERE published_at IS NULL AND next_attempt_at <= now()"); n != 5-published {
+		t.Fatalf("the rest of the batch must be released for other relays: %d released, want %d", n, 5-published)
+	}
+}

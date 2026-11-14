@@ -131,7 +131,7 @@ export class SqsConsumer {
       env = unwrap(body);
     } catch (error) {
       if (error instanceof PoisonMessageError) return this.poison(message, error);
-      throw error;
+      return this.transient(message, error); // unexpected: retry via SQS, never crash the loop
     }
     const logContext = {
       correlationId: env.correlationId,

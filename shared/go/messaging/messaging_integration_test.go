@@ -291,3 +291,24 @@ func (b *syncBuffer) String() string {
 	defer b.mu.Unlock()
 	return b.buf.String()
 }
+
+type panicHandler struct{}
+
+func (panicHandler) Versions() []int { return []int{1} }
+
+func (panicHandler) Handle(context.Context, pgx.Tx, envelope.Envelope) error {
+	panic("handler bug")
+}
+
+// Review finding: a handler panic must not take down the process; it is retried like a transient error.
+func TestProcessRecoversHandlerPanicAsTransient(t *testing.T) {
+	f := setup(t, map[string]messaging.Handler{"OrderCreated": panicHandler{}})
+	f.send(example(t, "OrderCreated.v1", msgID))
+	outcomes := f.receiveAndProcess(f.queueURL)
+	if len(outcomes) != 1 || outcomes[0] != messaging.Transient {
+		t.Fatalf("want [Transient], got %v", outcomes)
+	}
+	if n := testenv.Count(t, f.pool, "SELECT count(*) FROM processed_messages"); n != 0 {
+		t.Fatalf("panicked handler must roll back, processed_messages = %d", n)
+	}
+}

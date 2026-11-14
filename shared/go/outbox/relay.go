@@ -59,11 +59,16 @@ type row struct {
 // RunOnce claims one batch and publishes it in id order. On the first publish failure the failed row
 // is rescheduled with backoff, the rest of the batch is released, and the publish error is returned.
 func (r *Relay) RunOnce(ctx context.Context) (published int, err error) {
+	started := time.Now()
 	rows, err := r.claim(ctx)
 	if err != nil {
 		return 0, err
 	}
 	for i, row := range rows {
+		// Stop at half the lease: past it another relay may re-claim rows still being published.
+		if time.Since(started) >= r.cfg.ClaimLease/2 {
+			return published, r.release(ctx, rows[i:])
+		}
 		tp := ""
 		if row.traceparent != nil {
 			tp = *row.traceparent
@@ -73,7 +78,8 @@ func (r *Relay) RunOnce(ctx context.Context) (published int, err error) {
 			return published, errors.Join(pubErr, r.reschedule(ctx, row, pubErr), r.release(ctx, rows[i+1:]))
 		}
 		if _, err := r.cfg.Pool.Exec(ctx, `UPDATE outbox SET published_at = now(), last_error = NULL WHERE id = $1`, row.id); err != nil {
-			return published, fmt.Errorf("mark published: %w", err)
+			// The row stays leased and is republished later (at-least-once); release the rest now.
+			return published, errors.Join(fmt.Errorf("mark published: %w", err), r.release(ctx, rows[i+1:]))
 		}
 		r.setBroker(ctx, true, nil)
 		published++

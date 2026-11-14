@@ -191,7 +191,7 @@ func (c *Consumer) Process(ctx context.Context, msg sqstypes.Message) Outcome {
 		return Duplicate
 	}
 
-	handleErr := handler.Handle(ctx, tx, env)
+	handleErr := safeHandle(ctx, handler, tx, env)
 	switch {
 	case handleErr == nil, errors.Is(handleErr, ErrStale):
 		if err := tx.Commit(ctx); err != nil {
@@ -270,4 +270,15 @@ func traceparentOf(msg sqstypes.Message, body []byte) string {
 // (HTTP_CLIENT_TIMEOUT_MS) is shorter than the long poll (SQS_WAIT_TIME_S) and would cut every receive.
 func (c *Consumer) longPoll(o *sqs.Options) {
 	o.HTTPClient = &http.Client{Timeout: time.Duration(c.cfg.WaitTimeS)*time.Second + c.cfg.RequestTimeout}
+}
+
+// safeHandle turns a handler panic into an error, so a bug in one handler is retried (transient) and
+// does not kill the process with every in-flight message.
+func safeHandle(ctx context.Context, h Handler, tx pgx.Tx, env envelope.Envelope) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("handler panic: %v", r)
+		}
+	}()
+	return h.Handle(ctx, tx, env)
 }
