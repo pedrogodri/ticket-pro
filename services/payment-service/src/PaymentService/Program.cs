@@ -48,7 +48,9 @@ app.MapHealthEndpoints(async ct =>
 {
     try
     {
-        await using var connection = await appDb.OpenConnectionAsync(ct);
+        // A pooled connection can be returned without a round trip; SELECT 1 proves the database answers.
+        await using var command = appDb.CreateCommand("SELECT 1");
+        await command.ExecuteScalarAsync(ct);
         return true;
     }
     catch (Exception e) when (e is NpgsqlException or OperationCanceledException or TimeoutException or System.Net.Sockets.SocketException)
