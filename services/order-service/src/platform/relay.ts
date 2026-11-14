@@ -68,9 +68,15 @@ export class OutboxRelay {
    * with backoff, the rest of the batch is released, and the error is rethrown.
    */
   async runOnce(): Promise<number> {
+    const started = Date.now();
     const rows = await this.claim();
     let published = 0;
     for (const [i, row] of rows.entries()) {
+      // Stop at half the lease: past it another relay may re-claim rows still being published.
+      if (Date.now() - started >= this.opts.claimLeaseMs / 2) {
+        await this.release(rows.slice(i));
+        return published;
+      }
       try {
         await this.publisher.publish(row.topicArn, row.envelope, row.traceparent ?? undefined);
       } catch (error) {
@@ -79,10 +85,16 @@ export class OutboxRelay {
         await this.release(rows.slice(i + 1));
         throw error;
       }
-      await this.pool.query(
-        "UPDATE outbox SET published_at = now(), last_error = NULL WHERE id = $1",
-        [row.id],
-      );
+      try {
+        await this.pool.query(
+          "UPDATE outbox SET published_at = now(), last_error = NULL WHERE id = $1",
+          [row.id],
+        );
+      } catch (error) {
+        // The row stays leased and is republished later (at-least-once); release the rest now.
+        await this.release(rows.slice(i + 1));
+        throw error;
+      }
       this.setBroker(true);
       published++;
       const e = row.envelope;

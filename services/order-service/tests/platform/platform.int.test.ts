@@ -209,6 +209,30 @@ describe("platform integration (P07–P15)", () => {
   });
 });
 
+describe("relay lease", () => {
+  // Review finding: the relay stops at half the claim lease and releases the rest of the batch.
+  it("P16 relay stops before the lease expires", async () => {
+    const p = await pool();
+    for (let i = 0; i < 5; i++) await inTx(p, (c) => enqueue(c, TOPIC_ARN, newEnvelope()));
+    const slow: Publisher = { publish: () => new Promise((r) => setTimeout(r, 150)) };
+    const relay = new OutboxRelay(
+      p,
+      slow,
+      { batchSize: 5, pollIntervalMs: 1, maxBackoffMs: 1000, claimLeaseMs: 400 },
+      quiet,
+    );
+    const published = await relay.runOnce();
+    expect(published).toBeGreaterThanOrEqual(1);
+    expect(published).toBeLessThanOrEqual(4);
+    expect(
+      await count(
+        p,
+        "SELECT count(*) AS n FROM outbox WHERE published_at IS NULL AND next_attempt_at <= now()",
+      ),
+    ).toBe(5 - published);
+  });
+});
+
 // ---------- consumer ----------
 
 class EffectHandler implements MessageHandler {
