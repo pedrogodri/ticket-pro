@@ -229,6 +229,36 @@ class PlatformIT {
     assertThat(calls.values()).allSatisfy(n -> assertThat(n.get()).isEqualTo(1));
   }
 
+  /** Review finding: the relay stops at half the claim lease and releases the rest of the batch. */
+  @Test
+  void p16RelayStopsBeforeTheLeaseExpires() throws Exception {
+    DataSource ds = Containers.postgres();
+    for (int i = 0; i < 5; i++) {
+      enqueue(ds, TOPIC_ARN, newEnvelope(), true);
+    }
+    OutboxPublisher slow =
+        (topic, env, traceparent) -> {
+          try {
+            Thread.sleep(150);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+        };
+    OutboxRelay relay =
+        new OutboxRelay(
+            ds,
+            slow,
+            new OutboxRelayProperties(
+                5, Duration.ofMillis(1), Duration.ofSeconds(1), Duration.ofMillis(400)));
+    int published = relay.runOnce();
+    assertThat(published).isBetween(1, 4);
+    assertThat(
+            Containers.count(
+                ds,
+                "SELECT count(*) FROM outbox WHERE published_at IS NULL AND next_attempt_at <= now()"))
+        .isEqualTo(5 - published);
+  }
+
   // ---------- consumer ----------
 
   /**

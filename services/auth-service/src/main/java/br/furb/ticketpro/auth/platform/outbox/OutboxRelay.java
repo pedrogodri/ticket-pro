@@ -53,9 +53,15 @@ public final class OutboxRelay {
    * rescheduled with backoff, the rest of the batch is released, and the failure is rethrown.
    */
   public int runOnce() throws SQLException {
+    long started = System.nanoTime();
     List<Row> rows = claim();
     int published = 0;
     for (int i = 0; i < rows.size(); i++) {
+      // Stop at half the lease: past it another relay may re-claim rows still being published.
+      if (System.nanoTime() - started >= props.claimLease().toNanos() / 2) {
+        release(rows.subList(i, rows.size()));
+        return published;
+      }
       Row row = rows.get(i);
       try {
         publisher.publish(row.topicArn(), row.envelope(), Optional.ofNullable(row.traceparent()));
@@ -65,7 +71,13 @@ public final class OutboxRelay {
         release(rows.subList(i + 1, rows.size()));
         throw e;
       }
-      execute("UPDATE outbox SET published_at = now(), last_error = NULL WHERE id = ?", row.id());
+      try {
+        execute("UPDATE outbox SET published_at = now(), last_error = NULL WHERE id = ?", row.id());
+      } catch (SQLException e) {
+        // The row stays leased and is republished later (at-least-once); release the rest now.
+        release(rows.subList(i + 1, rows.size()));
+        throw e;
+      }
       setBroker(true, null);
       published++;
       Envelope e = row.envelope();
