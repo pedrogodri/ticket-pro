@@ -1,6 +1,9 @@
 using Amazon.SimpleNotificationService;
+using Amazon.SQS;
 using Npgsql;
 using UserService.App;
+using UserService.Modules.MyTickets;
+using UserService.Modules.Profiles;
 using TicketPro.Platform;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -42,8 +45,36 @@ builder.Services.AddSingleton(sp => new OutboxRelay(workerDb, sp.GetRequiredServ
     sp.GetRequiredService<ILogger<OutboxRelay>>()));
 builder.Services.AddHostedService<OutboxRelayHostedService>();
 
+// Consumer: its own SQS client, whose timeout allows the long poll (AwsClientConfig.LongPollTimeout).
+var consumerOptions = new SqsConsumerOptions
+{
+    QueueUrl = config.QueueUrl,
+    Name = config.ServiceName,
+    Concurrency = config.ConsumerConcurrency,
+    WaitTimeSeconds = config.SqsWaitTimeSeconds,
+    RequestTimeout = config.HttpClientTimeout,
+};
+var sqsConfig = AwsClientConfig.Apply(new AmazonSQSConfig(), AwsClientConfig.LongPollTimeout(consumerOptions));
+if (builder.Configuration["AWS_ENDPOINT_URL"] is { Length: > 0 } sqsEndpoint)
+{
+    sqsConfig.ServiceURL = sqsEndpoint;
+    sqsConfig.AuthenticationRegion = builder.Configuration["AWS_REGION"];
+}
+builder.Services.AddSingleton(sp => new SqsConsumer(
+    new AmazonSQSClient(sqsConfig), workerDb, new ContractValidator(config.ContractsDir),
+    new Dictionary<string, IMessageHandler>
+    {
+        ["UserRegistered"] = new UserRegisteredHandler(),
+        ["TicketsIssued"] = new TicketsIssuedHandler(),
+        ["OrderConfirmed"] = new OrderConfirmedHandler(),
+    },
+    consumerOptions, sp.GetRequiredService<ILogger<SqsConsumer>>()));
+builder.Services.AddHostedService<ConsumerHostedService>();
+
 var app = builder.Build();
 var relay = app.Services.GetRequiredService<OutboxRelay>();
+var consumer = app.Services.GetRequiredService<SqsConsumer>();
+app.MapMeEndpoints(appDb);
 app.MapHealthEndpoints(async ct =>
 {
     try
@@ -57,7 +88,7 @@ app.MapHealthEndpoints(async ct =>
     {
         return false;
     }
-}, () => relay.BrokerUp);
+}, () => relay.BrokerUp && consumer.BrokerUp);
 app.Lifetime.ApplicationStopped.Register(() =>
 {
     appDb.Dispose();

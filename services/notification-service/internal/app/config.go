@@ -17,6 +17,16 @@ type Config struct {
 	DatabaseURL       string // API role, RLS applies (docs/padroes.md §6.1)
 	DatabaseWorkerURL string // worker role: consumers and jobs
 	HTTPClientTimeout time.Duration
+	QueueURL          string
+	ContractsDir      string
+	ReceiptsBucket    string // RECEIPTS_BUCKET
+	Consumer          ConsumerConfig
+}
+
+// ConsumerConfig tunes the SQS consumer (RFC 0003 §5.1).
+type ConsumerConfig struct {
+	Concurrency int
+	WaitTimeS   int
 }
 
 // LoadConfig reads and validates configuration. The returned error names the offending variable.
@@ -29,6 +39,13 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		DatabaseURL:       r.required("DATABASE_URL"),
 		DatabaseWorkerURL: r.required("DATABASE_WORKER_URL"),
 		HTTPClientTimeout: r.millis("HTTP_CLIENT_TIMEOUT_MS", 3000),
+		QueueURL:          r.required("QUEUE_URL"),
+		ContractsDir:      r.required("CONTRACTS_DIR"),
+		ReceiptsBucket:    r.required("RECEIPTS_BUCKET"),
+		Consumer: ConsumerConfig{
+			Concurrency: r.positiveInt("CONSUMER_CONCURRENCY", 4),
+			WaitTimeS:   r.positiveInt("SQS_WAIT_TIME_S", 10),
+		},
 	}
 	if r.err != nil {
 		return Config{}, r.err

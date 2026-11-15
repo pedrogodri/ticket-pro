@@ -4,7 +4,7 @@ Perfil do usuário e read model "meus ingressos" do Ticket Pro, em C# com .NET 1
 
 **Dona:** Yasmin.
 
-**Estado:** plataforma pronta (F1): banco com migrations Flyway, outbox + relay (`Platform/`, vendorizado de `shared/dotnet`) e readiness com `db`/`broker`. O domínio chega na F2.
+**Estado:** F2: perfil projetado de `UserRegistered` (`GET /me`) e read model "meus ingressos" projetado de `TicketsIssued` (`GET /me/tickets`, paginado), ambos com RLS por `app.user_id`. A falha de cadastro (`UserCreationFailed`) chega na F3.
 
 ## Responsabilidades
 

@@ -4,7 +4,7 @@ Credenciais, emissão de JWT, refresh tokens e JWKS do Ticket Pro, em Java 21 co
 
 **Dono:** Felipe.
 
-**Estado:** plataforma pronta (F1): camada `platform/` em Java (envelope, outbox + relay, consumidor idempotente), banco com migrations Flyway e readiness com `db`/`broker`. Cadastro, login e chave no Secrets Manager chegam na F2.
+**Estado:** F2: cadastro (`POST /auth/register`), login (`POST /auth/login`, JWT RS256 + refresh token guardado como hash) e JWKS (`GET /.well-known/jwks.json`, interno) prontos, com a chave lida do Secrets Manager. Refresh, logout e a compensação do cadastro chegam na F3.
 
 ## Responsabilidades
 
@@ -56,6 +56,9 @@ O banco é `auth`, no container `auth-db`. Tabelas: `credentials` (`email UNIQUE
 | `DATABASE_WORKER_URL` | sim | role `auth_worker` (relay, consumidores, login/registro) |
 | `AUTH_TOPIC_ARN` | sim | `arn:aws:sns:us-east-1:000000000000:ticketpro-auth` |
 | `AWS_REGION` | sim | `us-east-1` (`AWS_ENDPOINT_URL` aponta para o MiniStack) |
+| `JWT_SECRET_ID` | sim | `ticketpro/auth/jwt-signing-key` (formato `{current:{kid,privatePem},previous}`) |
+| `JWT_ISSUER`, `JWT_AUDIENCE`, `JWT_ACCESS_TTL_S`, `JWT_REFRESH_TTL_S`, `JWT_KEY_REFRESH_S` | não | `ticketpro-auth`, `ticketpro-api`, 900, 604800, 300 |
+| `ARGON2_MEMORY_KB`, `ARGON2_ITERATIONS`, `ARGON2_PARALLELISM` | não | 19456, 2, 1 |
 | `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_MAX_BACKOFF_MS`, `OUTBOX_CLAIM_LEASE_MS`, `HTTP_CLIENT_TIMEOUT_MS` | não | 200, 50, 30000, 30000, 3000 (RFC 0003 §5.1) |
 
 O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, só desenvolvimento). `contracts/` é cópia gerada por `scripts/sync-shared.sh`: não edite.

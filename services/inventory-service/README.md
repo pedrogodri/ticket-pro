@@ -4,7 +4,7 @@ Catálogo de eventos, estoque por setor, reservas e emissão de ingressos do Tic
 
 **Dono:** Pedro.
 
-**Estado:** plataforma pronta (F1): banco com migrations Flyway, outbox + relay e readiness com `db`/`broker`. O domínio chega na F2.
+**Estado:** F2: catálogo com seed (`GET /events`, `GET /events/{id}`), reserva atômica (`OrderCreated` → `InventoryReserved`/`InventoryRejected`), emissão de ingressos (`OrderConfirmed` → `TicketsIssued`) e devolução de estoque (`OrderCancelled`). Expiração de reservas e o upcaster v2 chegam na F3/F4.
 
 ## Responsabilidades
 

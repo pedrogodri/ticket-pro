@@ -12,6 +12,8 @@ public class AppConfigTests
         ["DATABASE_URL"] = "postgres://users_app:secret@users-db:5432/users",
         ["DATABASE_WORKER_URL"] = "postgres://users_worker:secret@users-db:5432/users",
         ["USERS_TOPIC_ARN"] = "arn:aws:sns:us-east-1:000000000000:ticketpro-users",
+        ["QUEUE_URL"] = "http://ministack:4566/000000000000/ticketpro-user-service",
+        ["CONTRACTS_DIR"] = "/contracts",
     };
 
     [Theory]
@@ -21,6 +23,8 @@ public class AppConfigTests
     [InlineData("DATABASE_URL")]
     [InlineData("DATABASE_WORKER_URL")]
     [InlineData("USERS_TOPIC_ARN")]
+    [InlineData("QUEUE_URL")]
+    [InlineData("CONTRACTS_DIR")]
     public void MissingRequiredVariable_ThrowsNamingIt(string name)
     {
         var env = ValidEnv();
@@ -58,6 +62,8 @@ public class AppConfigTests
         Assert.Equal(TimeSpan.FromSeconds(30), config.Outbox.MaxBackoff);
         Assert.Equal(TimeSpan.FromSeconds(30), config.Outbox.ClaimLease);
         Assert.Equal(TimeSpan.FromSeconds(3), config.HttpClientTimeout);
+        Assert.Equal(4, config.ConsumerConcurrency);
+        Assert.Equal(10, config.SqsWaitTimeSeconds);
     }
 
     [Theory]

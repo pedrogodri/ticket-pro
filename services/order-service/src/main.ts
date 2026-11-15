@@ -1,6 +1,11 @@
 import { SNSClient } from "@aws-sdk/client-sns";
+import { SQSClient } from "@aws-sdk/client-sqs";
 import { loadConfig, type Config } from "./app/config.js";
 import { buildServer } from "./app/server.js";
+import { registerOrderRoutes } from "./modules/orders/http/routes.js";
+import { createSagaHandlers } from "./modules/orders/application/saga.js";
+import { SqsConsumer } from "./platform/consumer.js";
+import { createValidator } from "./platform/validator.js";
 import { createPool } from "./platform/db.js";
 import { createLogger } from "./platform/logging.js";
 import { awsClientConfig, SnsPublisher } from "./platform/publisher.js";
@@ -33,17 +38,44 @@ const app = buildServer(config, {
   pingDb: async () => {
     await appPool.query("SELECT 1");
   },
-  brokerUp: () => relay.brokerUp,
+  brokerUp: () => relay.brokerUp && consumer.brokerUp,
 });
+registerOrderRoutes(app, {
+  pool: appPool,
+  topicArn: config.topicArn,
+  maxQuantity: config.maxQuantity,
+});
+
 const relay = new OutboxRelay(workerPool, new SnsPublisher(sns), config.outbox, logger);
+// The consumer's client allows the long poll (SQS_WAIT_TIME_S); each receive passes its own timeout.
+const sqs = new SQSClient({
+  ...awsClientConfig(config.httpClientTimeoutMs),
+  region: config.awsRegion,
+  ...(config.awsEndpointUrl ? { endpoint: config.awsEndpointUrl } : {}),
+});
+const consumer = new SqsConsumer(
+  sqs,
+  workerPool,
+  await createValidator(config.contractsDir),
+  createSagaHandlers({ topicArn: config.topicArn, paymentTimeoutMs: config.paymentTimeoutMs }),
+  {
+    queueUrl: config.queueUrl,
+    name: config.serviceName,
+    concurrency: config.consumer.concurrency,
+    waitTimeSeconds: config.consumer.waitTimeSeconds,
+    requestTimeoutMs: config.httpClientTimeoutMs,
+  },
+  logger,
+);
 const stopRelay = new AbortController();
 const relayDone = relay.run(stopRelay.signal);
+const consumerDone = consumer.run(stopRelay.signal);
 
 const shutdown = async (signal: string): Promise<void> => {
   app.log.info({ signal }, "http_server_stopping");
   stopRelay.abort(); // the current batch finishes; unpublished rows stay in the outbox
   await app.close();
-  await relayDone;
+  await Promise.all([relayDone, consumerDone]);
   await Promise.all([appPool.end(), workerPool.end()]);
   process.exit(0);
 };

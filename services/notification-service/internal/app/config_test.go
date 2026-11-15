@@ -14,6 +14,9 @@ func validEnv() map[string]string {
 		"LOG_LEVEL":           "info",
 		"DATABASE_URL":        "postgres://notifications_app:x@notifications-db:5432/notifications",
 		"DATABASE_WORKER_URL": "postgres://notifications_worker:x@notifications-db:5432/notifications",
+		"QUEUE_URL":           "http://ministack:4566/000000000000/ticketpro-notification-service",
+		"CONTRACTS_DIR":       "/contracts",
+		"RECEIPTS_BUCKET":     "ticketpro-receipts",
 	}
 }
 
@@ -23,7 +26,7 @@ func load(t *testing.T, env map[string]string) (Config, error) {
 }
 
 func TestLoadConfig_RequiredVariables(t *testing.T) {
-	for _, name := range []string{"SERVICE_NAME", "PORT", "LOG_LEVEL", "DATABASE_URL", "DATABASE_WORKER_URL"} {
+	for _, name := range []string{"SERVICE_NAME", "PORT", "LOG_LEVEL", "DATABASE_URL", "DATABASE_WORKER_URL", "QUEUE_URL", "CONTRACTS_DIR", "RECEIPTS_BUCKET"} {
 		env := validEnv()
 		delete(env, name)
 		if _, err := load(t, env); err == nil || !strings.Contains(err.Error(), name) {
@@ -52,6 +55,10 @@ func TestLoadConfig_Defaults(t *testing.T) {
 		DatabaseURL:       "postgres://notifications_app:x@notifications-db:5432/notifications",
 		DatabaseWorkerURL: "postgres://notifications_worker:x@notifications-db:5432/notifications",
 		HTTPClientTimeout: 3 * time.Second,
+		QueueURL:          "http://ministack:4566/000000000000/ticketpro-notification-service",
+		ContractsDir:      "/contracts",
+		ReceiptsBucket:    "ticketpro-receipts",
+		Consumer:          ConsumerConfig{Concurrency: 4, WaitTimeS: 10},
 	}
 	if cfg != want {
 		t.Fatalf("got %+v\nwant %+v", cfg, want)

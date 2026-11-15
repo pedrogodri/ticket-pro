@@ -14,9 +14,14 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/sns"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ticketpro/inventory-service/internal/app"
+	"github.com/ticketpro/inventory-service/internal/modules/catalog"
+	"github.com/ticketpro/inventory-service/internal/modules/reservations"
+	"github.com/ticketpro/inventory-service/internal/modules/tickets"
+	"github.com/ticketpro/inventory-service/internal/platform/envelope"
 	"github.com/ticketpro/inventory-service/internal/platform/logging"
 	"github.com/ticketpro/inventory-service/internal/platform/messaging"
 	"github.com/ticketpro/inventory-service/internal/platform/outbox"
@@ -82,7 +87,35 @@ func run(ctx context.Context, cfg app.Config, logger *slog.Logger) error {
 		}
 	}()
 
-	err = app.Run(ctx, cfg, logger, app.NewHealthHandler(appPool, relay))
+	validator, err := envelope.NewValidator(cfg.ContractsDir)
+	if err != nil {
+		return fmt.Errorf("CONTRACTS_DIR: %w", err)
+	}
+	consumer := messaging.NewConsumer(messaging.ConsumerConfig{
+		SQS: sqs.NewFromConfig(awsCfg), QueueURL: cfg.QueueURL, Name: cfg.ServiceName, Pool: workerPool,
+		Validator: validator, Concurrency: cfg.Consumer.Concurrency, WaitTimeS: cfg.Consumer.WaitTimeS,
+		RequestTimeout: cfg.HTTPClientTimeout, Logger: logger,
+		Handlers: map[string]messaging.Handler{
+			"OrderCreated":   reservations.OrderCreatedHandler{TopicARN: cfg.TopicARN, TTL: cfg.ReservationTTL},
+			"OrderConfirmed": tickets.OrderConfirmedHandler{TopicARN: cfg.TopicARN},
+			"OrderCancelled": reservations.OrderCancelledHandler{},
+		},
+	})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := consumer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("consumer_stopped", "error", err.Error())
+		}
+	}()
+
+	catalogHandler := catalog.NewHandler(catalog.NewRepository(appPool))
+	mux := http.NewServeMux()
+	mux.Handle("/health/", app.NewHealthHandler(appPool, app.AllUp(relay, consumer)))
+	mux.Handle("/events", catalogHandler)
+	mux.Handle("/events/", catalogHandler)
+
+	err = app.Run(ctx, cfg, logger, mux)
 	cancel() // also stops the relay when the HTTP server fails on its own
 	wg.Wait()
 	return err

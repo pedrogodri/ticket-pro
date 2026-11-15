@@ -3,6 +3,8 @@
 services:
   payment-service:
     build: .
+    deploy:
+      replicas: 2
     env_file: .env.example
     networks: [backend, payment-service-data]
     depends_on:

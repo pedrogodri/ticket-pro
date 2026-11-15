@@ -1,5 +1,11 @@
 package br.furb.ticketpro.auth.platform.config;
 
+import br.furb.ticketpro.auth.modules.keys.JwtIssuer;
+import br.furb.ticketpro.auth.modules.keys.SecretsManagerSigningKeys;
+import br.furb.ticketpro.auth.modules.keys.SigningKeys;
+import br.furb.ticketpro.auth.modules.registration.PasswordHasher;
+import br.furb.ticketpro.auth.modules.registration.RegistrationService;
+import br.furb.ticketpro.auth.modules.session.LoginService;
 import br.furb.ticketpro.auth.platform.health.BrokerProbe;
 import br.furb.ticketpro.auth.platform.health.DatabaseProbe;
 import br.furb.ticketpro.auth.platform.messaging.AwsClients;
@@ -10,6 +16,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import java.net.URI;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Clock;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -17,6 +24,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
 import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient;
+import software.amazon.awssdk.services.secretsmanager.SecretsManagerClientBuilder;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sns.SnsClientBuilder;
 
@@ -87,6 +96,54 @@ public class AppConfigConfiguration {
   @Bean
   public OutboxRelayRunner outboxRelayRunner(OutboxRelay relay) {
     return new OutboxRelayRunner(relay);
+  }
+
+  @Bean(destroyMethod = "close")
+  public SecretsManagerClient secretsManagerClient(AppConfig config) {
+    SecretsManagerClientBuilder builder =
+        SecretsManagerClient.builder()
+            .region(Region.of(config.awsRegion()))
+            .overrideConfiguration(AwsClients.overrideConfiguration(config.httpClientTimeout()));
+    config.awsEndpointUrl().map(URI::create).ifPresent(builder::endpointOverride);
+    return builder.build();
+  }
+
+  @Bean
+  public SigningKeys signingKeys(SecretsManagerClient client, AppConfig config) {
+    return new SecretsManagerSigningKeys(
+        client, config.jwt().secretId(), config.jwt().keyRefresh());
+  }
+
+  @Bean
+  public PasswordHasher passwordHasher(AppConfig config) {
+    return new PasswordHasher(
+        config.argon2().memoryKb(), config.argon2().iterations(), config.argon2().parallelism());
+  }
+
+  @Bean
+  public JwtIssuer jwtIssuer(SigningKeys keys, AppConfig config) {
+    return new JwtIssuer(
+        keys,
+        config.jwt().issuer(),
+        config.jwt().audience(),
+        config.jwt().accessTtlSeconds(),
+        Clock.systemUTC());
+  }
+
+  @Bean
+  public RegistrationService registrationService(
+      @Qualifier("worker") DataSource worker, PasswordHasher hasher, AppConfig config) {
+    return new RegistrationService(worker, hasher, config.topicArn());
+  }
+
+  @Bean
+  public LoginService loginService(
+      @Qualifier("worker") DataSource worker,
+      PasswordHasher hasher,
+      JwtIssuer issuer,
+      AppConfig config) {
+    return new LoginService(
+        worker, hasher, issuer, config.jwt().refreshTtlSeconds(), Clock.systemUTC());
   }
 
   @Bean

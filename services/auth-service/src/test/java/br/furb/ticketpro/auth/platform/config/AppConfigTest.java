@@ -22,6 +22,7 @@ class AppConfigTest {
     env.put("DATABASE_WORKER_URL", "postgres://auth_worker:secret@auth-db:5432/auth");
     env.put("AUTH_TOPIC_ARN", "arn:aws:sns:us-east-1:000000000000:ticketpro-auth");
     env.put("AWS_REGION", "us-east-1");
+    env.put("JWT_SECRET_ID", "ticketpro/auth/jwt-signing-key");
     return env;
   }
 

@@ -3,6 +3,8 @@
 services:
   auth-service:
     build: .
+    # Fails fast while infra-init has not created the JWT secret yet; compose restarts it until it exists.
+    restart: on-failure
     env_file: .env.example
     networks: [backend, auth-service-data]
     depends_on:

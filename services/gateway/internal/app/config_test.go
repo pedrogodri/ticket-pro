@@ -1,50 +1,58 @@
 package app
 
 import (
-	"log/slog"
 	"strings"
 	"testing"
+	"time"
 )
 
-func envFrom(m map[string]string) func(string) string {
-	return func(k string) string { return m[k] }
-}
-
-func TestLoadConfig_MissingPort(t *testing.T) {
-	_, err := LoadConfig(envFrom(map[string]string{"SERVICE_NAME": "gateway", "LOG_LEVEL": "info"}))
-	if err == nil || !strings.Contains(err.Error(), "PORT") {
-		t.Fatalf("want error naming PORT, got %v", err)
+func validEnv() map[string]string {
+	return map[string]string{
+		"SERVICE_NAME":   "gateway",
+		"PORT":           "8080",
+		"LOG_LEVEL":      "info",
+		"GATEWAY_ROUTES": "auth=http://auth-service:8080,orders=http://order-service:8080",
+		"JWKS_URL":       "http://auth-service:8080/.well-known/jwks.json",
 	}
 }
 
-func TestLoadConfig_InvalidPort(t *testing.T) {
-	_, err := LoadConfig(envFrom(map[string]string{"SERVICE_NAME": "gateway", "PORT": "abc", "LOG_LEVEL": "info"}))
-	if err == nil || !strings.Contains(err.Error(), "PORT") {
-		t.Fatalf("want error naming PORT, got %v", err)
+func load(env map[string]string) (Config, error) {
+	return LoadConfig(func(k string) string { return env[k] })
+}
+
+func TestLoadConfig_RequiredVariables(t *testing.T) {
+	for _, name := range []string{"SERVICE_NAME", "PORT", "LOG_LEVEL", "GATEWAY_ROUTES", "JWKS_URL"} {
+		env := validEnv()
+		delete(env, name)
+		if _, err := load(env); err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("missing %s: want error naming it, got %v", name, err)
+		}
 	}
 }
 
-func TestLoadConfig_MissingServiceName(t *testing.T) {
-	_, err := LoadConfig(envFrom(map[string]string{"PORT": "8080", "LOG_LEVEL": "info"}))
-	if err == nil || !strings.Contains(err.Error(), "SERVICE_NAME") {
-		t.Fatalf("want error naming SERVICE_NAME, got %v", err)
+func TestLoadConfig_InvalidValues(t *testing.T) {
+	cases := map[string]string{
+		"PORT": "abc", "LOG_LEVEL": "verbose", "GATEWAY_ROUTES": "auth", "GATEWAY_MAX_BODY_BYTES": "0",
+	}
+	for name, value := range cases {
+		env := validEnv()
+		env[name] = value
+		if _, err := load(env); err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s=%q: want error naming it, got %v", name, value, err)
+		}
 	}
 }
 
-func TestLoadConfig_InvalidLogLevel(t *testing.T) {
-	_, err := LoadConfig(envFrom(map[string]string{"SERVICE_NAME": "gateway", "PORT": "8080", "LOG_LEVEL": "verbose"}))
-	if err == nil || !strings.Contains(err.Error(), "LOG_LEVEL") {
-		t.Fatalf("want error naming LOG_LEVEL, got %v", err)
-	}
-}
-
-func TestLoadConfig_Valid(t *testing.T) {
-	cfg, err := LoadConfig(envFrom(map[string]string{"SERVICE_NAME": "gateway", "PORT": "8080", "LOG_LEVEL": "info"}))
+func TestLoadConfig_DefaultsFromRFC0002(t *testing.T) {
+	cfg, err := load(validEnv())
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
-	want := Config{ServiceName: "gateway", Port: 8080, LogLevel: slog.LevelInfo}
-	if cfg != want {
-		t.Fatalf("got %+v, want %+v", cfg, want)
+	if cfg.Routes["auth"].String() != "http://auth-service:8080" || cfg.Routes["orders"].Host != "order-service:8080" {
+		t.Fatalf("routes %v", cfg.Routes)
+	}
+	if cfg.JWTIssuer != "ticketpro-auth" || cfg.JWTAudience != "ticketpro-api" || cfg.JWKSCacheTTL != 5*time.Minute ||
+		cfg.ClockSkew != 30*time.Second || cfg.MaxBodyBytes != 65536 || cfg.UpstreamTimeout != 5*time.Second {
+		t.Fatalf("defaults %+v", cfg)
 	}
 }

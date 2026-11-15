@@ -26,7 +26,7 @@ build:
 	$(RUN) dotnet build $(SLN) -c Release
 
 test:
-	$(RUN) dotnet test $(SLN)
+	$(RUN) dotnet test $(SLN) --filter "Category!=Integration"
 
 test-integration:
 	$(RUN) dotnet test $(SLN) --filter "Category=Integration"

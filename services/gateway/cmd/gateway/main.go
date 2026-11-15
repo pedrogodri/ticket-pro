@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/ticketpro/gateway/internal/app"
+	"github.com/ticketpro/gateway/internal/jwtauth"
+	"github.com/ticketpro/gateway/internal/proxy"
 )
 
 func main() {
@@ -29,7 +31,21 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	if err := app.Run(ctx, cfg, logger); err != nil {
+	verifier := jwtauth.NewVerifier(jwtauth.VerifierConfig{
+		Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, ClockSkew: cfg.ClockSkew,
+		CacheTTL: cfg.JWKSCacheTTL, RefetchMinInterval: 10 * time.Second,
+	}, jwtauth.HTTPFetcher(cfg.JWKSURL, &http.Client{Timeout: cfg.UpstreamTimeout}))
+	edge := proxy.New(proxy.Config{
+		Routes: cfg.Routes,
+		// RFC 0002 §5.5: the only routes without a token (refresh arrives in F3).
+		Public:          map[string]bool{"POST /auth/register": true, "POST /auth/login": true},
+		MaxBodyBytes:    cfg.MaxBodyBytes,
+		UpstreamTimeout: cfg.UpstreamTimeout,
+		Verifier:        verifier,
+		Logger:          logger,
+	})
+
+	if err := app.Run(ctx, cfg, logger, edge); err != nil {
 		logger.Error("server_failed", "error", err.Error())
 		os.Exit(1)
 	}

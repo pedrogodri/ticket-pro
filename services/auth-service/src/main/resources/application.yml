@@ -3,6 +3,10 @@ spring:
     name: ${SERVICE_NAME:auth-service}
   main:
     banner-mode: off
+  jackson:
+    deserialization:
+      # padroes §4: unknown fields in a request body are rejected with 400.
+      fail-on-unknown-properties: true
 
 server:
   port: ${PORT:8080}
