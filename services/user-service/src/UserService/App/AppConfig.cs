@@ -14,13 +14,18 @@ public sealed record AppConfig(
     string DatabaseWorkerUrl,
     string TopicArn,
     OutboxRelayOptions Outbox,
-    TimeSpan HttpClientTimeout)
+    TimeSpan HttpClientTimeout,
+    string QueueUrl,
+    string ContractsDir,
+    int ConsumerConcurrency,
+    int SqsWaitTimeSeconds)
 {
     /// <summary>Variables read by <see cref="FromEnvironment"/>.</summary>
     public static readonly string[] Variables =
     [
         "SERVICE_NAME", "PORT", "LOG_LEVEL", "DATABASE_URL", "DATABASE_WORKER_URL", "USERS_TOPIC_ARN",
         "OUTBOX_POLL_INTERVAL_MS", "OUTBOX_BATCH_SIZE", "OUTBOX_MAX_BACKOFF_MS", "OUTBOX_CLAIM_LEASE_MS", "HTTP_CLIENT_TIMEOUT_MS",
+        "QUEUE_URL", "CONTRACTS_DIR", "CONSUMER_CONCURRENCY", "SQS_WAIT_TIME_S",
     ];
 
     private static readonly string[] LogLevels = ["debug", "info", "warn", "error"];
@@ -57,7 +62,11 @@ public sealed record AppConfig(
                 MaxBackoff = Millis(env, "OUTBOX_MAX_BACKOFF_MS", 30000),
                 ClaimLease = Millis(env, "OUTBOX_CLAIM_LEASE_MS", 30000),
             },
-            Millis(env, "HTTP_CLIENT_TIMEOUT_MS", 3000));
+            Millis(env, "HTTP_CLIENT_TIMEOUT_MS", 3000),
+            Required(env, "QUEUE_URL"),
+            Required(env, "CONTRACTS_DIR"),
+            PositiveInt(env, "CONSUMER_CONCURRENCY", 4),
+            PositiveInt(env, "SQS_WAIT_TIME_S", 10));
     }
 
     /// <summary>Converts postgres://user:pass@host[:port]/db (docs/padroes.md §3.1) to an Npgsql connection string.</summary>
