@@ -31,7 +31,7 @@ test-integration:
 
 lint:
 	$(RUN) sh -c 'u="$$(gofmt -l .)"; if [ -n "$$u" ]; then echo "gofmt needed: $$u"; exit 1; fi'
-	docker run --rm -v "$(CURDIR):/app" -w /app $(GOLANGCI_IMAGE) golangci-lint run ./...
+	docker run --rm -v "$(CURDIR):/app" -w /app $(GOLANGCI_IMAGE) golangci-lint run --build-tags integration ./...
 
 fmt:
 	$(RUN) gofmt -w .
