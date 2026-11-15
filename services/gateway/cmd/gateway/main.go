@@ -16,6 +16,7 @@ import (
 	"github.com/ticketpro/gateway/internal/platform/envelope"
 	"github.com/ticketpro/gateway/internal/platform/messaging"
 	"github.com/ticketpro/gateway/internal/proxy"
+	"github.com/ticketpro/gateway/internal/ratelimit"
 	"github.com/ticketpro/gateway/internal/revocation"
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
@@ -61,7 +62,12 @@ func main() {
 		UpstreamTimeout: cfg.UpstreamTimeout,
 		Verifier:        verifier,
 		Revocations:     revocations,
-		Logger:          logger,
+		Limiter:         ratelimit.Limiter{Client: rdb, Clock: time.Now},
+		Limits: proxy.Limits{
+			Default: rule(cfg.Limits.Default), Public: rule(cfg.Limits.Public),
+			Login: rule(cfg.Limits.Login), Orders: rule(cfg.Limits.Orders),
+		},
+		Logger: logger,
 	})
 
 	awsCfg, err := messaging.NewAWSConfig(ctx, cfg.HTTPClientTimeout)
@@ -113,3 +119,5 @@ func healthcheck() int {
 type redisPinger struct{ client *redis.Client }
 
 func (p redisPinger) Ping(ctx context.Context) error { return p.client.Ping(ctx).Err() }
+
+func rule(r app.Rule) ratelimit.Rule { return ratelimit.Rule{RPS: r.RPS, Burst: r.Burst} }

@@ -29,7 +29,17 @@ type Config struct {
 	ContractsDir      string        // CONTRACTS_DIR: vendored contracts for envelope validation
 	SQSWaitTimeS      int           // SQS_WAIT_TIME_S: long poll
 	HTTPClientTimeout time.Duration // HTTP_CLIENT_TIMEOUT_MS: AWS SDK calls
+	Limits            Limits
 }
+
+// Rule is one token bucket: RPS refill up to Burst.
+type Rule struct {
+	RPS   float64
+	Burst int
+}
+
+// Limits are the rate limit buckets per route class (RFC 0002 §5.8).
+type Limits struct{ Default, Public, Login, Orders Rule }
 
 // LoadConfig reads and validates configuration. The returned error names the offending variable.
 func LoadConfig(getenv func(string) string) (Config, error) {
@@ -52,6 +62,12 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		ContractsDir:      r.required("CONTRACTS_DIR"),
 		SQSWaitTimeS:      r.positiveInt("SQS_WAIT_TIME_S", 10),
 		HTTPClientTimeout: r.millis("HTTP_CLIENT_TIMEOUT_MS", 3000),
+		Limits: Limits{
+			Default: Rule{r.positiveFloat("RATE_LIMIT_RPS", 10), r.positiveInt("RATE_LIMIT_BURST", 20)},
+			Public:  Rule{r.positiveFloat("RATE_LIMIT_PUBLIC_RPS", 5), r.positiveInt("RATE_LIMIT_PUBLIC_BURST", 10)},
+			Login:   Rule{r.positiveFloat("AUTH_LOGIN_RPS", 1), r.positiveInt("AUTH_LOGIN_BURST", 5)},
+			Orders:  Rule{r.positiveFloat("ORDERS_RPS", 2), r.positiveInt("ORDERS_BURST", 5)},
+		},
 	}
 	if r.err != nil {
 		return Config{}, r.err
@@ -151,6 +167,18 @@ func (r *reader) positiveInt(name string, def int) int {
 		r.fail("%s must be a positive integer, got %q", name, raw)
 	}
 	return n
+}
+
+func (r *reader) positiveFloat(name string, def float64) float64 {
+	raw := strings.TrimSpace(r.getenv(name))
+	if raw == "" {
+		return def
+	}
+	f, err := strconv.ParseFloat(raw, 64)
+	if err != nil || f <= 0 {
+		r.fail("%s must be a positive number, got %q", name, raw)
+	}
+	return f
 }
 
 func (r *reader) millis(name string, def int) time.Duration {

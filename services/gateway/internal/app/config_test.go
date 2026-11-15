@@ -69,3 +69,31 @@ func TestLoadConfig_RedisDefaults(t *testing.T) {
 		t.Fatalf("redis %q %v", cfg.RedisURL, cfg.RedisTimeout)
 	}
 }
+
+func TestLoadConfig_RateLimitDefaults(t *testing.T) {
+	cfg, err := load(validEnv())
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := cfg.Limits
+	if l.Default.RPS != 10 || l.Default.Burst != 20 || l.Public.RPS != 5 || l.Public.Burst != 10 ||
+		l.Login.RPS != 1 || l.Login.Burst != 5 || l.Orders.RPS != 2 || l.Orders.Burst != 5 {
+		t.Fatalf("limits %+v", l)
+	}
+}
+
+func TestLoadConfig_RateLimitValues(t *testing.T) {
+	env := validEnv()
+	env["AUTH_LOGIN_RPS"] = "0.5"
+	cfg, err := load(env)
+	if err != nil || cfg.Limits.Login.RPS != 0.5 {
+		t.Fatalf("login rps %v err %v", cfg.Limits.Login.RPS, err)
+	}
+	for _, name := range []string{"RATE_LIMIT_RPS", "AUTH_LOGIN_RPS", "ORDERS_BURST"} {
+		env := validEnv()
+		env[name] = "0"
+		if _, err := load(env); err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s=0: want error naming it, got %v", name, err)
+		}
+	}
+}
