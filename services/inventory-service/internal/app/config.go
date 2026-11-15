@@ -19,6 +19,16 @@ type Config struct {
 	TopicARN          string // INVENTORY_TOPIC_ARN
 	Outbox            OutboxConfig
 	HTTPClientTimeout time.Duration
+	QueueURL          string // own SQS queue
+	ContractsDir      string // vendored contracts (message validation)
+	Consumer          ConsumerConfig
+	ReservationTTL    time.Duration // RESERVATION_TTL_MS
+}
+
+// ConsumerConfig tunes the SQS consumer (RFC 0003 §5.1).
+type ConsumerConfig struct {
+	Concurrency int
+	WaitTimeS   int
 }
 
 // OutboxConfig tunes the outbox relay (RFC 0003 §5.1).
@@ -46,6 +56,13 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 			ClaimLease:   r.millis("OUTBOX_CLAIM_LEASE_MS", 30000),
 		},
 		HTTPClientTimeout: r.millis("HTTP_CLIENT_TIMEOUT_MS", 3000),
+		QueueURL:          r.required("QUEUE_URL"),
+		ContractsDir:      r.required("CONTRACTS_DIR"),
+		Consumer: ConsumerConfig{
+			Concurrency: r.positiveInt("CONSUMER_CONCURRENCY", 4),
+			WaitTimeS:   r.positiveInt("SQS_WAIT_TIME_S", 10),
+		},
+		ReservationTTL: r.millis("RESERVATION_TTL_MS", 60000),
 	}
 	if r.err != nil {
 		return Config{}, r.err

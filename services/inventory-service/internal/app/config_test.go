@@ -15,6 +15,8 @@ func validEnv() map[string]string {
 		"DATABASE_URL":        "postgres://inventory_app:x@inventory-db:5432/inventory",
 		"DATABASE_WORKER_URL": "postgres://inventory_worker:x@inventory-db:5432/inventory",
 		"INVENTORY_TOPIC_ARN": "arn:aws:sns:us-east-1:000000000000:ticketpro-inventory",
+		"QUEUE_URL":           "http://ministack:4566/000000000000/ticketpro-inventory-service",
+		"CONTRACTS_DIR":       "/contracts",
 	}
 }
 
@@ -24,7 +26,7 @@ func load(t *testing.T, env map[string]string) (Config, error) {
 }
 
 func TestLoadConfig_RequiredVariables(t *testing.T) {
-	for _, name := range []string{"SERVICE_NAME", "PORT", "LOG_LEVEL", "DATABASE_URL", "DATABASE_WORKER_URL", "INVENTORY_TOPIC_ARN"} {
+	for _, name := range []string{"SERVICE_NAME", "PORT", "LOG_LEVEL", "DATABASE_URL", "DATABASE_WORKER_URL", "INVENTORY_TOPIC_ARN", "QUEUE_URL", "CONTRACTS_DIR"} {
 		env := validEnv()
 		delete(env, name)
 		if _, err := load(t, env); err == nil || !strings.Contains(err.Error(), name) {
@@ -59,6 +61,10 @@ func TestLoadConfig_DefaultsFromRFC0003(t *testing.T) {
 			MaxBackoff: 30 * time.Second, ClaimLease: 30 * time.Second,
 		},
 		HTTPClientTimeout: 3 * time.Second,
+		QueueURL:          "http://ministack:4566/000000000000/ticketpro-inventory-service",
+		ContractsDir:      "/contracts",
+		Consumer:          ConsumerConfig{Concurrency: 4, WaitTimeS: 10},
+		ReservationTTL:    time.Minute,
 	}
 	if cfg != want {
 		t.Fatalf("got %+v\nwant %+v", cfg, want)

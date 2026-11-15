@@ -48,3 +48,18 @@ func writeJSON(w http.ResponseWriter, code int, body string) {
 	w.WriteHeader(code)
 	_, _ = w.Write([]byte(body))
 }
+
+// allUp reports the broker up only when every component sees it up (relay and consumer).
+type allUp []BrokerStatus
+
+func (a allUp) BrokerUp() bool {
+	for _, s := range a {
+		if !s.BrokerUp() {
+			return false
+		}
+	}
+	return true
+}
+
+// AllUp combines broker views: readiness says "up" only if all of them are up.
+func AllUp(statuses ...BrokerStatus) BrokerStatus { return allUp(statuses) }
