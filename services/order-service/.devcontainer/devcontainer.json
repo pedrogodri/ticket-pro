@@ -1,0 +1,26 @@
+{
+  // Opens only this service folder (ADR-0016). Same SDK image as `make TOOLCHAIN=docker`.
+  // Docker-outside-of-Docker lets Testcontainers and `make run` use the host Docker (Docker Desktop or OrbStack).
+  "name": "order-service (TypeScript)",
+  "image": "node:22",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": { "installZsh": false, "username": "none" },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
+  "containerEnv": {
+    "TOOLCHAIN": "local",
+    "TESTCONTAINERS_HOST_OVERRIDE": "host.docker.internal"
+  },
+  "postCreateCommand": "npm ci --no-audit --no-fund",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "vitest.explorer",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  }
+}

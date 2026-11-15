@@ -1,0 +1,48 @@
+# notification-service + its own database (ADR-0004, ADR-0020). Included by the root docker-compose.yml.
+# The database lives only on ticketpro-notification-service-data: no other service can reach it.
+services:
+  notification-service:
+    build: .
+    env_file: .env.example
+    networks: [backend, notification-service-data]
+    depends_on:
+      notification-service-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "/notification-service", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  notification-service-migrate:
+    image: flyway/flyway:13.11.1-alpine
+    command: migrate
+    env_file: db.env.example
+    volumes:
+      - ./migrations:/flyway/sql:ro
+    networks: [notification-service-data]
+    depends_on:
+      notifications-db:
+        condition: service_healthy
+
+  notifications-db:
+    image: postgres:16-alpine
+    env_file: db.env.example
+    volumes:
+      - notifications-data:/var/lib/postgresql/data
+    networks: [notification-service-data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notifications_owner -d notifications"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+networks:
+  backend:
+    name: ticketpro-backend
+  notification-service-data:
+    name: ticketpro-notification-service-data
+    internal: true
+
+volumes:
+  notifications-data:

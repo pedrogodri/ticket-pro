@@ -1,0 +1,19 @@
+{
+  // Opens only this service folder (ADR-0016). Same SDK image as `make TOOLCHAIN=docker`.
+  // Docker-outside-of-Docker lets Testcontainers and `make run` use the host Docker (Docker Desktop or OrbStack).
+  "name": "auth-service (Java)",
+  "image": "eclipse-temurin:21-jdk",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": { "installZsh": false, "username": "none" },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
+  "containerEnv": {
+    "TOOLCHAIN": "local",
+    "TESTCONTAINERS_HOST_OVERRIDE": "host.docker.internal"
+  },
+  "postCreateCommand": "./mvnw -q -B dependency:go-offline",
+  "customizations": {
+    "vscode": { "extensions": ["vscjava.vscode-java-pack", "vmware.vscode-spring-boot", "ms-azuretools.vscode-docker"] }
+  }
+}

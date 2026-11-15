@@ -1,0 +1,24 @@
+name: shared-go
+
+on:
+  push:
+    branches: [main]
+    paths: ["shared/go/**", "contracts/**", ".github/workflows/shared-go.yml"]
+  pull_request:
+    paths: ["shared/go/**", "contracts/**", ".github/workflows/shared-go.yml"]
+
+defaults:
+  run:
+    working-directory: shared/go
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: shared/go/go.mod
+      - run: make lint typecheck test
+      - name: Integration tests (Testcontainers, Postgres + MiniStack)
+        run: make test-integration

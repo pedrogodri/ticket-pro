@@ -1,0 +1,24 @@
+name: shared-dotnet
+
+on:
+  push:
+    branches: [main]
+    paths: ["shared/dotnet/**", "contracts/**", ".github/workflows/shared-dotnet.yml"]
+  pull_request:
+    paths: ["shared/dotnet/**", "contracts/**", ".github/workflows/shared-dotnet.yml"]
+
+defaults:
+  run:
+    working-directory: shared/dotnet
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: make lint typecheck test
+      - name: Integration tests (Testcontainers, Postgres + MiniStack)
+        run: make test-integration

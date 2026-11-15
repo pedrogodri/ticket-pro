@@ -1,0 +1,80 @@
+# Shared infrastructure: AWS emulation (MiniStack) and the networks every service joins.
+# Included by the root docker-compose.yml. Only operational tools may publish ports here.
+name: ticketpro
+
+services:
+  ministack:
+    image: ministackorg/ministack:1.5.40
+    environment:
+      MINISTACK_REGION: ${AWS_REGION:-us-east-1}
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request as r; r.urlopen('http://localhost:4566/_ministack/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  # Applies infra/terraform (ADR-0011). Compose re-runs it on every `docker compose up`; with the
+  # state kept in the `tf-state` volume that re-run is a no-op and never touches queued messages.
+  # MiniStack keeps SNS/SQS in memory only: after restarting it, re-run this job so the refresh
+  # recreates the missing resources:
+  #   docker compose up -d --force-recreate infra-init
+  # `docker compose down -v` drops both MiniStack and the state, so the next `up` starts clean.
+  infra-init:
+    image: hashicorp/terraform:1.16.7
+    depends_on:
+      ministack:
+        condition: service_healthy
+    environment:
+      TF_VAR_aws_endpoint: ${AWS_ENDPOINT_URL:-http://ministack:4566}
+      TF_VAR_aws_region: ${AWS_REGION:-us-east-1}
+      TF_PLUGIN_CACHE_DIR: /plugins
+      TF_IN_AUTOMATION: "1"
+    volumes:
+      - ../terraform:/tf:ro
+      - tf-plugins:/plugins
+      - tf-state:/state
+    working_dir: /work
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        rm -rf /work/* && cp -r /tf/. /work &&
+        terraform init -input=false -no-color -lockfile=readonly &&
+        terraform apply -auto-approve -input=false -no-color &&
+        terraform output -json -no-color
+    networks: [backend]
+    restart: "no"
+
+  # Observability (ADR-0012): services export OTLP to the collector, which forwards to Jaeger.
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.164.0
+    command: ["--config=/etc/otelcol/collector.yaml"]
+    volumes:
+      - ../otel/collector.yaml:/etc/otelcol/collector.yaml:ro
+    depends_on:
+      - jaeger
+    networks: [backend]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.75.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI (operations tool, ADR-0012)
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:14269/"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  tf-plugins:
+  tf-state:
+
+networks:
+  edge:
+    name: ticketpro-edge
+  backend:
+    name: ticketpro-backend

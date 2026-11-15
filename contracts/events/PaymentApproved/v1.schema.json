@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ticketpro.local/contracts/events/PaymentApproved/v1.schema.json",
+  "title": "PaymentApproved v1",
+  "description": "Provedor aprovou a cobrança (pode chegar após o deadline do pedido — ver RFC 0003).",
+  "x-topic": "ticketpro-payments",
+  "x-producer": "payment-service",
+  "x-consumers": [
+    "order-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "PaymentApproved"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "paymentId",
+        "amountCents",
+        "currency",
+        "providerReference",
+        "approvedAt"
+      ],
+      "properties": {
+        "orderId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "paymentId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "amountCents": {
+          "$ref": "../../common.schema.json#/$defs/amountCents"
+        },
+        "currency": {
+          "$ref": "../../common.schema.json#/$defs/currency"
+        },
+        "providerReference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "approvedAt": {
+          "$ref": "../../common.schema.json#/$defs/timestamp"
+        }
+      }
+    }
+  }
+}

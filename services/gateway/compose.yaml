@@ -1,0 +1,20 @@
+# gateway: the only service that publishes a port (ADR-0002, ADR-0016).
+# Included by the root docker-compose.yml; also valid on its own (`make run`).
+services:
+  gateway:
+    build: .
+    env_file: .env.example
+    ports:
+      - "8080:8080"
+    networks: [edge, backend]
+    healthcheck:
+      test: ["CMD", "/gateway", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  edge:
+    name: ticketpro-edge
+  backend:
+    name: ticketpro-backend

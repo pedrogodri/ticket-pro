@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ticketpro.local/contracts/events/InventoryRejected/v1.schema.json",
+  "title": "InventoryRejected v1",
+  "description": "Reserva negada; o pedido é cancelado sem compensação.",
+  "x-topic": "ticketpro-inventory",
+  "x-producer": "inventory-service",
+  "x-consumers": [
+    "order-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "InventoryRejected"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "eventId",
+        "sectorId",
+        "quantity",
+        "reason"
+      ],
+      "properties": {
+        "orderId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "eventId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "sectorId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "OUT_OF_STOCK",
+            "SECTOR_NOT_FOUND",
+            "INVALID_QUANTITY"
+          ]
+        }
+      }
+    }
+  }
+}

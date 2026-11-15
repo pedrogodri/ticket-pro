@@ -1,0 +1,15 @@
+using System.Text.Json;
+
+namespace TicketPro.Platform;
+
+/// <summary>The six-field message envelope (RFC 0001 §5.1).</summary>
+public sealed record Envelope(string MessageId, string CorrelationId, string Type, int Version, DateTimeOffset OccurredAt, JsonElement Payload)
+{
+    /// <summary>New envelope with a UUID v7 messageId and occurredAt = now (UTC, millisecond precision).</summary>
+    public static Envelope Create(string correlationId, string type, int version, object payload)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var occurredAt = new DateTimeOffset(now.Ticks - (now.Ticks % TimeSpan.TicksPerMillisecond), TimeSpan.Zero);
+        return new Envelope(Guid.CreateVersion7().ToString(), correlationId, type, version, occurredAt, JsonSerializer.SerializeToElement(payload));
+    }
+}

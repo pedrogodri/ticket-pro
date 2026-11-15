@@ -1,0 +1,19 @@
+{
+  // Opens only this service folder (ADR-0016). Same SDK image as `make TOOLCHAIN=docker`.
+  // Docker-outside-of-Docker lets Testcontainers and `make run` use the host Docker (Docker Desktop or OrbStack).
+  "name": "gateway (Go)",
+  "image": "golang:1.25",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": { "installZsh": false, "username": "none" },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
+  "containerEnv": {
+    "TOOLCHAIN": "local",
+    "TESTCONTAINERS_HOST_OVERRIDE": "host.docker.internal"
+  },
+  "postCreateCommand": "go mod download",
+  "customizations": {
+    "vscode": { "extensions": ["golang.go", "ms-azuretools.vscode-docker"] }
+  }
+}

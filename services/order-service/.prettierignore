@@ -1,0 +1,5 @@
+node_modules
+dist
+package-lock.json
+# Vendored by scripts/sync-shared.sh (ADR-0017): copied verbatim, never reformatted.
+contracts

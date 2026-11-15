@@ -1,0 +1,23 @@
+name: payment-service
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/payment-service/**", ".github/workflows/payment-service.yml"]
+  pull_request:
+    paths: ["services/payment-service/**", ".github/workflows/payment-service.yml"]
+
+defaults:
+  run:
+    working-directory: services/payment-service
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - run: make lint typecheck test
+      - run: docker build .

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ticketpro.local/contracts/events/OrderCreated/v2.schema.json",
+  "title": "OrderCreated v2",
+  "description": "v2 adiciona o campo obrigatório channel (origem da compra). Consumidores aceitam v1 via upcaster (channel = API).",
+  "x-topic": "ticketpro-orders",
+  "x-producer": "order-service",
+  "x-consumers": [
+    "inventory-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "OrderCreated"
+    },
+    "version": {
+      "const": 2
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "userId",
+        "eventId",
+        "sectorId",
+        "quantity",
+        "channel"
+      ],
+      "properties": {
+        "orderId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "userId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "eventId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "sectorId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "quantity": {
+          "$ref": "../../common.schema.json#/$defs/quantity"
+        },
+        "channel": {
+          "type": "string",
+          "enum": [
+            "API",
+            "WEB",
+            "MOBILE"
+          ]
+        }
+      }
+    }
+  }
+}

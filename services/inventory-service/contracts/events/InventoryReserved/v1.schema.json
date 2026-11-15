@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ticketpro.local/contracts/events/InventoryReserved/v1.schema.json",
+  "title": "InventoryReserved v1",
+  "description": "Estoque reservado até expiresAt; informa o preço (fonte da verdade é o inventory).",
+  "x-topic": "ticketpro-inventory",
+  "x-producer": "inventory-service",
+  "x-consumers": [
+    "order-service"
+  ],
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "../../envelope.schema.json"
+    }
+  ],
+  "properties": {
+    "type": {
+      "const": "InventoryReserved"
+    },
+    "version": {
+      "const": 1
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "orderId",
+        "reservationId",
+        "eventId",
+        "sectorId",
+        "quantity",
+        "unitPriceCents",
+        "totalCents",
+        "currency",
+        "expiresAt"
+      ],
+      "properties": {
+        "orderId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "reservationId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "eventId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "sectorId": {
+          "$ref": "../../common.schema.json#/$defs/uuid"
+        },
+        "quantity": {
+          "$ref": "../../common.schema.json#/$defs/quantity"
+        },
+        "unitPriceCents": {
+          "$ref": "../../common.schema.json#/$defs/amountCents"
+        },
+        "totalCents": {
+          "$ref": "../../common.schema.json#/$defs/amountCents"
+        },
+        "currency": {
+          "$ref": "../../common.schema.json#/$defs/currency"
+        },
+        "expiresAt": {
+          "$ref": "../../common.schema.json#/$defs/timestamp"
+        }
+      }
+    }
+  }
+}

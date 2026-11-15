@@ -1,0 +1,54 @@
+using Amazon.Runtime;
+using Amazon.SimpleNotificationService;
+using Amazon.SimpleNotificationService.Model;
+
+namespace TicketPro.Platform;
+
+/// <summary>AWS client settings shared by every service (RFC 0003 §5.5).</summary>
+public static class AwsClientConfig
+{
+    /// <summary>Disables SDK retries (our backoff owns retrying) and sets the HTTP timeout.</summary>
+    public static T Apply<T>(T config, TimeSpan timeout) where T : ClientConfig
+    {
+        ArgumentNullException.ThrowIfNull(config);
+        config.MaxErrorRetry = 0;
+        config.Timeout = timeout;
+        return config;
+    }
+
+    /// <summary>HTTP timeout the consumer's SQS client needs: WaitTimeSeconds + RequestTimeout.
+    /// The general HTTP_CLIENT_TIMEOUT_MS is shorter than the long poll and would cut every receive.</summary>
+    public static TimeSpan LongPollTimeout(SqsConsumerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return TimeSpan.FromSeconds(options.WaitTimeSeconds) + options.RequestTimeout;
+    }
+}
+
+/// <summary>Publishes envelopes as the SNS Message with type, version, correlationId and traceparent attributes (RFC 0001 §5.2).</summary>
+public sealed class SnsOutboxPublisher(IAmazonSimpleNotificationService sns) : IOutboxPublisher
+{
+    /// <summary>A null or empty traceparent is omitted: SNS rejects empty String attributes.</summary>
+    public async Task PublishAsync(string topicArn, Envelope envelope, string? traceparent, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+        var attributes = new Dictionary<string, MessageAttributeValue>
+        {
+            ["type"] = Attr(envelope.Type),
+            ["version"] = Attr(envelope.Version.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+            ["correlationId"] = Attr(envelope.CorrelationId),
+        };
+        if (!string.IsNullOrEmpty(traceparent))
+        {
+            attributes["traceparent"] = Attr(traceparent);
+        }
+        await sns.PublishAsync(new PublishRequest
+        {
+            TopicArn = topicArn,
+            Message = EnvelopeJson.Serialize(envelope),
+            MessageAttributes = attributes,
+        }, ct);
+    }
+
+    private static MessageAttributeValue Attr(string value) => new() { DataType = "String", StringValue = value };
+}

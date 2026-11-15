@@ -1,0 +1,23 @@
+name: autoscaler
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/autoscaler/**", ".github/workflows/autoscaler.yml"]
+  pull_request:
+    paths: ["services/autoscaler/**", ".github/workflows/autoscaler.yml"]
+
+defaults:
+  run:
+    working-directory: services/autoscaler
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/autoscaler/go.mod
+      - run: make lint typecheck test
+      - run: docker build .

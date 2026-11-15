@@ -1,0 +1,15 @@
+# autoscaler: internal only (no published ports). Included by the root docker-compose.yml.
+services:
+  autoscaler:
+    build: .
+    env_file: .env.example
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "/autoscaler", "healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  backend:
+    name: ticketpro-backend

@@ -1,0 +1,598 @@
+# Catálogo AsyncAPI. Mantenha em sincronia com contracts/events/** no mesmo PR (RFC 0001 §7).
+asyncapi: "3.1.0"
+info:
+  title: "Ticket Pro — eventos de domínio"
+  version: "1.0.0"
+  description: "Catálogo de eventos do Ticket Pro. Cada tópico SNS é um canal; cada serviço consumidor tem uma fila SQS própria (ticketpro-<serviço>) com DLQ, assinada por filter policy no atributo type. Fonte da verdade dos payloads: contracts/events/<Type>/v<N>.schema.json (RFC 0001)."
+defaultContentType: application/json
+servers:
+  ministack:
+    host: "ministack:4566"
+    protocol: sns
+    description: "MiniStack (AWS emulada). Endpoint configurado por AWS_ENDPOINT_URL."
+channels:
+  ticketpro-auth:
+    address: ticketpro-auth
+    description: "Tópico SNS ticketpro-auth."
+    messages:
+      UserRegisteredV1:
+        "$ref": "#/components/messages/UserRegisteredV1"
+      TokenRevokedV1:
+        "$ref": "#/components/messages/TokenRevokedV1"
+  ticketpro-users:
+    address: ticketpro-users
+    description: "Tópico SNS ticketpro-users."
+    messages:
+      UserCreationFailedV1:
+        "$ref": "#/components/messages/UserCreationFailedV1"
+  ticketpro-orders:
+    address: ticketpro-orders
+    description: "Tópico SNS ticketpro-orders."
+    messages:
+      OrderCreatedV1:
+        "$ref": "#/components/messages/OrderCreatedV1"
+      OrderCreatedV2:
+        "$ref": "#/components/messages/OrderCreatedV2"
+      PaymentRequestedV1:
+        "$ref": "#/components/messages/PaymentRequestedV1"
+      OrderConfirmedV1:
+        "$ref": "#/components/messages/OrderConfirmedV1"
+      OrderCancelledV1:
+        "$ref": "#/components/messages/OrderCancelledV1"
+      RefundRequestedV1:
+        "$ref": "#/components/messages/RefundRequestedV1"
+  ticketpro-inventory:
+    address: ticketpro-inventory
+    description: "Tópico SNS ticketpro-inventory."
+    messages:
+      InventoryReservedV1:
+        "$ref": "#/components/messages/InventoryReservedV1"
+      InventoryRejectedV1:
+        "$ref": "#/components/messages/InventoryRejectedV1"
+      InventoryReservationExpiredV1:
+        "$ref": "#/components/messages/InventoryReservationExpiredV1"
+      TicketsIssuedV1:
+        "$ref": "#/components/messages/TicketsIssuedV1"
+  ticketpro-payments:
+    address: ticketpro-payments
+    description: "Tópico SNS ticketpro-payments."
+    messages:
+      PaymentApprovedV1:
+        "$ref": "#/components/messages/PaymentApprovedV1"
+      PaymentFailedV1:
+        "$ref": "#/components/messages/PaymentFailedV1"
+      PaymentRefundedV1:
+        "$ref": "#/components/messages/PaymentRefundedV1"
+operations:
+  publishUserRegisteredV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-auth"
+    summary: "auth-service publica UserRegistered v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-auth/messages/UserRegisteredV1"
+    x-service: auth-service
+  userReceivesUserRegisteredV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-auth"
+    summary: "user-service consome UserRegistered v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-auth/messages/UserRegisteredV1"
+    x-service: user-service
+    x-queue: ticketpro-user-service
+    x-dlq: ticketpro-user-service-dlq
+  publishTokenRevokedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-auth"
+    summary: "auth-service publica TokenRevoked v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-auth/messages/TokenRevokedV1"
+    x-service: auth-service
+  gatewayReceivesTokenRevokedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-auth"
+    summary: "gateway consome TokenRevoked v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-auth/messages/TokenRevokedV1"
+    x-service: gateway
+    x-queue: ticketpro-gateway
+    x-dlq: ticketpro-gateway-dlq
+  publishUserCreationFailedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-users"
+    summary: "user-service publica UserCreationFailed v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-users/messages/UserCreationFailedV1"
+    x-service: user-service
+  authReceivesUserCreationFailedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-users"
+    summary: "auth-service consome UserCreationFailed v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-users/messages/UserCreationFailedV1"
+    x-service: auth-service
+    x-queue: ticketpro-auth-service
+    x-dlq: ticketpro-auth-service-dlq
+  publishOrderCreatedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "order-service publica OrderCreated v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCreatedV1"
+    x-service: order-service
+  inventoryReceivesOrderCreatedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "inventory-service consome OrderCreated v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCreatedV1"
+    x-service: inventory-service
+    x-queue: ticketpro-inventory-service
+    x-dlq: ticketpro-inventory-service-dlq
+  publishOrderCreatedV2:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "order-service publica OrderCreated v2 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCreatedV2"
+    x-service: order-service
+  inventoryReceivesOrderCreatedV2:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "inventory-service consome OrderCreated v2."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCreatedV2"
+    x-service: inventory-service
+    x-queue: ticketpro-inventory-service
+    x-dlq: ticketpro-inventory-service-dlq
+  publishPaymentRequestedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "order-service publica PaymentRequested v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/PaymentRequestedV1"
+    x-service: order-service
+  paymentReceivesPaymentRequestedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "payment-service consome PaymentRequested v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/PaymentRequestedV1"
+    x-service: payment-service
+    x-queue: ticketpro-payment-service
+    x-dlq: ticketpro-payment-service-dlq
+  publishOrderConfirmedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "order-service publica OrderConfirmed v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderConfirmedV1"
+    x-service: order-service
+  inventoryReceivesOrderConfirmedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "inventory-service consome OrderConfirmed v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderConfirmedV1"
+    x-service: inventory-service
+    x-queue: ticketpro-inventory-service
+    x-dlq: ticketpro-inventory-service-dlq
+  userReceivesOrderConfirmedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "user-service consome OrderConfirmed v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderConfirmedV1"
+    x-service: user-service
+    x-queue: ticketpro-user-service
+    x-dlq: ticketpro-user-service-dlq
+  publishOrderCancelledV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "order-service publica OrderCancelled v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCancelledV1"
+    x-service: order-service
+  inventoryReceivesOrderCancelledV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "inventory-service consome OrderCancelled v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCancelledV1"
+    x-service: inventory-service
+    x-queue: ticketpro-inventory-service
+    x-dlq: ticketpro-inventory-service-dlq
+  notificationReceivesOrderCancelledV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "notification-service consome OrderCancelled v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/OrderCancelledV1"
+    x-service: notification-service
+    x-queue: ticketpro-notification-service
+    x-dlq: ticketpro-notification-service-dlq
+  publishRefundRequestedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "order-service publica RefundRequested v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/RefundRequestedV1"
+    x-service: order-service
+  paymentReceivesRefundRequestedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-orders"
+    summary: "payment-service consome RefundRequested v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-orders/messages/RefundRequestedV1"
+    x-service: payment-service
+    x-queue: ticketpro-payment-service
+    x-dlq: ticketpro-payment-service-dlq
+  publishInventoryReservedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-inventory"
+    summary: "inventory-service publica InventoryReserved v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryReservedV1"
+    x-service: inventory-service
+  orderReceivesInventoryReservedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-inventory"
+    summary: "order-service consome InventoryReserved v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryReservedV1"
+    x-service: order-service
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
+  publishInventoryRejectedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-inventory"
+    summary: "inventory-service publica InventoryRejected v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryRejectedV1"
+    x-service: inventory-service
+  orderReceivesInventoryRejectedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-inventory"
+    summary: "order-service consome InventoryRejected v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryRejectedV1"
+    x-service: order-service
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
+  publishInventoryReservationExpiredV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-inventory"
+    summary: "inventory-service publica InventoryReservationExpired v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryReservationExpiredV1"
+    x-service: inventory-service
+  orderReceivesInventoryReservationExpiredV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-inventory"
+    summary: "order-service consome InventoryReservationExpired v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-inventory/messages/InventoryReservationExpiredV1"
+    x-service: order-service
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
+  publishTicketsIssuedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-inventory"
+    summary: "inventory-service publica TicketsIssued v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-inventory/messages/TicketsIssuedV1"
+    x-service: inventory-service
+  userReceivesTicketsIssuedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-inventory"
+    summary: "user-service consome TicketsIssued v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-inventory/messages/TicketsIssuedV1"
+    x-service: user-service
+    x-queue: ticketpro-user-service
+    x-dlq: ticketpro-user-service-dlq
+  notificationReceivesTicketsIssuedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-inventory"
+    summary: "notification-service consome TicketsIssued v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-inventory/messages/TicketsIssuedV1"
+    x-service: notification-service
+    x-queue: ticketpro-notification-service
+    x-dlq: ticketpro-notification-service-dlq
+  publishPaymentApprovedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-payments"
+    summary: "payment-service publica PaymentApproved v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentApprovedV1"
+    x-service: payment-service
+  orderReceivesPaymentApprovedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-payments"
+    summary: "order-service consome PaymentApproved v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentApprovedV1"
+    x-service: order-service
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
+  publishPaymentFailedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-payments"
+    summary: "payment-service publica PaymentFailed v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentFailedV1"
+    x-service: payment-service
+  orderReceivesPaymentFailedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-payments"
+    summary: "order-service consome PaymentFailed v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentFailedV1"
+    x-service: order-service
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
+  publishPaymentRefundedV1:
+    action: send
+    channel:
+      "$ref": "#/channels/ticketpro-payments"
+    summary: "payment-service publica PaymentRefunded v1 via outbox."
+    messages:
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentRefundedV1"
+    x-service: payment-service
+  orderReceivesPaymentRefundedV1:
+    action: receive
+    channel:
+      "$ref": "#/channels/ticketpro-payments"
+    summary: "order-service consome PaymentRefunded v1."
+    messages:
+      - "$ref": "#/channels/ticketpro-payments/messages/PaymentRefundedV1"
+    x-service: order-service
+    x-queue: ticketpro-order-service
+    x-dlq: ticketpro-order-service-dlq
+components:
+  messages:
+    UserRegisteredV1:
+      name: UserRegistered
+      title: "UserRegistered v1"
+      summary: "Credencial criada no auth-service; o user-service cria o perfil."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/UserRegistered/v1.schema.json
+      x-version: 1
+    TokenRevokedV1:
+      name: TokenRevoked
+      title: "TokenRevoked v1"
+      summary: "Access token revogado; o gateway copia o jti para sua blacklist até expiresAt."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/TokenRevoked/v1.schema.json
+      x-version: 1
+    UserCreationFailedV1:
+      name: UserCreationFailed
+      title: "UserCreationFailed v1"
+      summary: "Perfil não pôde ser criado; o auth-service compensa removendo a credencial."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/UserCreationFailed/v1.schema.json
+      x-version: 1
+    OrderCreatedV1:
+      name: OrderCreated
+      title: "OrderCreated v1"
+      summary: "Pedido aceito (202) e pendente; inicia a saga pedindo reserva ao inventory."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/OrderCreated/v1.schema.json
+      x-version: 1
+    OrderCreatedV2:
+      name: OrderCreated
+      title: "OrderCreated v2"
+      summary: "v2 adiciona o campo obrigatório channel (origem da compra). Consumidores aceitam v1 via upcaster (channel = API)."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/OrderCreated/v2.schema.json
+      x-version: 2
+    PaymentRequestedV1:
+      name: PaymentRequested
+      title: "PaymentRequested v1"
+      summary: "Comando do orquestrador para cobrar o pedido reservado."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/PaymentRequested/v1.schema.json
+      x-version: 1
+    OrderConfirmedV1:
+      name: OrderConfirmed
+      title: "OrderConfirmed v1"
+      summary: "Pagamento aprovado dentro do prazo; o inventory emite os ingressos e o user registra a compra."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/OrderConfirmed/v1.schema.json
+      x-version: 1
+    OrderCancelledV1:
+      name: OrderCancelled
+      title: "OrderCancelled v1"
+      summary: "Pedido cancelado; o inventory libera a reserva (compensação) e o notification registra a falha."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/OrderCancelled/v1.schema.json
+      x-version: 1
+    RefundRequestedV1:
+      name: RefundRequested
+      title: "RefundRequested v1"
+      summary: "Comando de estorno para aprovação que chegou após o cancelamento do pedido."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/RefundRequested/v1.schema.json
+      x-version: 1
+    InventoryReservedV1:
+      name: InventoryReserved
+      title: "InventoryReserved v1"
+      summary: "Estoque reservado até expiresAt; informa o preço (fonte da verdade é o inventory)."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/InventoryReserved/v1.schema.json
+      x-version: 1
+    InventoryRejectedV1:
+      name: InventoryRejected
+      title: "InventoryRejected v1"
+      summary: "Reserva negada; o pedido é cancelado sem compensação."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/InventoryRejected/v1.schema.json
+      x-version: 1
+    InventoryReservationExpiredV1:
+      name: InventoryReservationExpired
+      title: "InventoryReservationExpired v1"
+      summary: "Reserva pendente expirou e o estoque foi devolvido; o order cancela se ainda não estiver em estado final."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/InventoryReservationExpired/v1.schema.json
+      x-version: 1
+    TicketsIssuedV1:
+      name: TicketsIssued
+      title: "TicketsIssued v1"
+      summary: "Ingressos emitidos (um código por unidade); alimenta 'meus ingressos' (CQRS) e o comprovante no S3."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/TicketsIssued/v1.schema.json
+      x-version: 1
+    PaymentApprovedV1:
+      name: PaymentApproved
+      title: "PaymentApproved v1"
+      summary: "Provedor aprovou a cobrança (pode chegar após o deadline do pedido — ver RFC 0003)."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/PaymentApproved/v1.schema.json
+      x-version: 1
+    PaymentFailedV1:
+      name: PaymentFailed
+      title: "PaymentFailed v1"
+      summary: "Cobrança recusada, com erro ou timeout do provedor; dispara a compensação."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/PaymentFailed/v1.schema.json
+      x-version: 1
+    PaymentRefundedV1:
+      name: PaymentRefunded
+      title: "PaymentRefunded v1"
+      summary: "Estorno concluído para uma aprovação tardia."
+      contentType: application/json
+      headers:
+        "$ref": "#/components/schemas/MessageAttributes"
+      payload:
+        schemaFormat: "application/schema+json;version=draft-07"
+        schema:
+          "$ref": ./events/PaymentRefunded/v1.schema.json
+      x-version: 1
+  schemas:
+    MessageAttributes:
+      type: object
+      description: "Atributos SNS/SQS (DataType=String) duplicados do envelope para filter policy e tracing."
+      required:
+        - type
+        - version
+        - correlationId
+      properties:
+        type:
+          type: string
+        version:
+          type: string
+          pattern: "^[1-9][0-9]*$"
+        correlationId:
+          type: string
+          format: uuid
+        traceparent:
+          type: string
+          description: "W3C Trace Context."

@@ -1,0 +1,49 @@
+# order-service + its own database (ADR-0004, ADR-0020). Included by the root docker-compose.yml.
+# The database lives only on ticketpro-order-service-data: no other service can reach it.
+services:
+  order-service:
+    build: .
+    env_file: .env.example
+    networks: [backend, order-service-data]
+    depends_on:
+      order-service-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  order-service-migrate:
+    image: flyway/flyway:13.11.1-alpine
+    command: migrate
+    env_file: db.env.example
+    volumes:
+      - ./migrations:/flyway/sql:ro
+    networks: [order-service-data]
+    depends_on:
+      orders-db:
+        condition: service_healthy
+
+  orders-db:
+    image: postgres:16-alpine
+    env_file: db.env.example
+    volumes:
+      - orders-data:/var/lib/postgresql/data
+    networks: [order-service-data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orders_owner -d orders"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+networks:
+  backend:
+    name: ticketpro-backend
+  order-service-data:
+    name: ticketpro-order-service-data
+    internal: true
+
+volumes:
+  orders-data:

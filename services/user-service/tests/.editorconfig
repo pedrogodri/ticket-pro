@@ -1,0 +1,5 @@
+root = false
+
+[*.cs]
+# xUnit naming convention Method_Scenario is idiomatic in tests.
+dotnet_diagnostic.CA1707.severity = none

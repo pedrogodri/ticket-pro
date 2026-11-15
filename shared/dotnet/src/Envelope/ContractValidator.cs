@@ -1,0 +1,68 @@
+using System.Text.Json;
+using Json.Schema;
+
+namespace TicketPro.Platform;
+
+/// <summary>Validates whole messages against contracts/events/&lt;type&gt;/v&lt;version&gt;.schema.json (RFC 0001 §5.3).</summary>
+public sealed class ContractValidator
+{
+    private static readonly EvaluationOptions Evaluation = new() { RequireFormatValidation = true, OutputFormat = OutputFormat.List };
+    private readonly Dictionary<string, JsonSchema> _schemas = new(StringComparer.Ordinal);
+
+    /// <summary>Loads every *.schema.json under <paramref name="contractsDir"/>, registered by its $id so relative $refs resolve.</summary>
+    public ContractValidator(string contractsDir)
+    {
+        var options = new BuildOptions { SchemaRegistry = new SchemaRegistry() };
+        var files = Directory.GetFiles(contractsDir, "*.schema.json", SearchOption.AllDirectories);
+        // Shared documents (envelope, common) first: event schemas reference them.
+        foreach (var file in files.OrderBy(f => Path.GetRelativePath(contractsDir, f).StartsWith("events", StringComparison.Ordinal) ? 1 : 0))
+        {
+            var schema = JsonSchema.FromText(File.ReadAllText(file), options);
+            options.SchemaRegistry.Register(schema);
+            var parts = Path.GetRelativePath(contractsDir, file).Split(Path.DirectorySeparatorChar);
+            if (parts.Length == 3 && parts[0] == "events")
+            {
+                _schemas[parts[1] + "/" + parts[2].Replace(".schema.json", "", StringComparison.Ordinal)] = schema;
+            }
+        }
+        if (_schemas.Count == 0)
+        {
+            throw new InvalidOperationException($"no event schemas under {contractsDir}/events");
+        }
+    }
+
+    /// <summary>Unknown type/version → <see cref="UnsupportedVersionException"/>; schema violation → <see cref="InvalidMessageException"/>.</summary>
+    public void Validate(string rawJson)
+    {
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(rawJson);
+        }
+        catch (JsonException e)
+        {
+            throw new InvalidMessageException("message is not JSON", e);
+        }
+        using (doc)
+        {
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidMessageException("message is not an object");
+            }
+            var type = root.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+            var version = root.TryGetProperty("version", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetRawText() : null;
+            if (type is null || version is null || !_schemas.TryGetValue($"{type}/v{version}", out var schema))
+            {
+                throw new UnsupportedVersionException($"{type} v{version}");
+            }
+            var result = schema.Evaluate(root, Evaluation);
+            if (!result.IsValid)
+            {
+                var errors = (result.Details ?? []).Where(d => d.Errors is not null)
+                    .SelectMany(d => d.Errors!.Select(e => $"{d.InstanceLocation}: {e.Value}"));
+                throw new InvalidMessageException($"{type} v{version}: {string.Join("; ", errors)}");
+            }
+        }
+    }
+}

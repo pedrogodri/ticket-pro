@@ -1,0 +1,13 @@
+# Root orchestration (ADR-0016): includes shared infra and each service's own compose.yaml.
+name: ticketpro
+
+include:
+  - infra/compose/compose.yaml
+  - services/gateway/compose.yaml
+  - services/auth-service/compose.yaml
+  - services/payment-service/compose.yaml
+  - services/order-service/compose.yaml
+  - services/user-service/compose.yaml
+  - services/inventory-service/compose.yaml
+  - services/notification-service/compose.yaml
+  - services/autoscaler/compose.yaml
