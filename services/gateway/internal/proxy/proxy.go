@@ -24,6 +24,11 @@ type TokenVerifier interface {
 	Verify(ctx context.Context, token string) (jwtauth.Claims, error)
 }
 
+// RevocationChecker reports whether a token id was revoked (ADR-0014).
+type RevocationChecker interface {
+	IsRevoked(ctx context.Context, jti string) (bool, error)
+}
+
 // Config configures the edge handler.
 type Config struct {
 	Routes          map[string]*url.URL // first path segment → upstream (GATEWAY_ROUTES)
@@ -31,6 +36,7 @@ type Config struct {
 	MaxBodyBytes    int64               // GATEWAY_MAX_BODY_BYTES
 	UpstreamTimeout time.Duration       // GATEWAY_UPSTREAM_TIMEOUT_MS
 	Verifier        TokenVerifier
+	Revocations     RevocationChecker // nil: no revocation check
 	Logger          *slog.Logger
 }
 
@@ -90,6 +96,18 @@ func New(cfg Config) http.Handler {
 				w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
 				problem.Write(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", correlationID)
 				return
+			}
+			if cfg.Revocations != nil {
+				revoked, err := cfg.Revocations.IsRevoked(r.Context(), claims.ID)
+				if err != nil {
+					// Fail-open (ADR-0014): the exposure is bounded by the 15 min access token TTL.
+					cfg.Logger.Warn("revocation_check_unavailable", "error", err.Error(), "correlationId", correlationID)
+				} else if revoked {
+					cfg.Logger.Info("token_rejected", "reason", "token revoked", "path", r.URL.Path, "correlationId", correlationID)
+					w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+					problem.Write(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", correlationID)
+					return
+				}
 			}
 			r.Header.Set("X-User-Id", claims.Subject)
 			r.Header.Set("X-User-Email", claims.Email)

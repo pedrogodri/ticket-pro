@@ -23,6 +23,8 @@ type Config struct {
 	ClockSkew       time.Duration
 	MaxBodyBytes    int64
 	UpstreamTimeout time.Duration
+	RedisURL        string        // REDIS_URL: the gateway's own Redis (revocation + rate limit)
+	RedisTimeout    time.Duration // REDIS_TIMEOUT_MS: per command; past it the check fails open
 }
 
 // LoadConfig reads and validates configuration. The returned error names the offending variable.
@@ -40,6 +42,8 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		ClockSkew:       time.Duration(r.positiveInt("JWT_CLOCK_SKEW_S", 30)) * time.Second,
 		MaxBodyBytes:    int64(r.positiveInt("GATEWAY_MAX_BODY_BYTES", 65536)),
 		UpstreamTimeout: r.millis("GATEWAY_UPSTREAM_TIMEOUT_MS", 5000),
+		RedisURL:        r.redisURL("REDIS_URL"),
+		RedisTimeout:    r.millis("REDIS_TIMEOUT_MS", 200),
 	}
 	if r.err != nil {
 		return Config{}, r.err
@@ -71,6 +75,17 @@ func (r *reader) routes(name string) map[string]*url.URL {
 		routes[segment] = u
 	}
 	return routes
+}
+
+func (r *reader) redisURL(name string) string {
+	raw := r.required(name)
+	if raw == "" {
+		return ""
+	}
+	if u, err := url.Parse(raw); err != nil || (u.Scheme != "redis" && u.Scheme != "rediss") || u.Host == "" {
+		r.fail("%s must be redis://host:port/db; got %q", name, raw)
+	}
+	return raw
 }
 
 // reader keeps the first validation error so LoadConfig reads like a declaration.

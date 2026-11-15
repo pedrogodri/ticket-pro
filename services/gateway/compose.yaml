@@ -6,15 +6,33 @@ services:
     env_file: .env.example
     ports:
       - "8080:8080"
-    networks: [edge, backend]
+    networks: [edge, backend, gateway-data]
+    depends_on:
+      gateway-redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "/gateway", "healthcheck"]
       interval: 5s
       timeout: 3s
       retries: 10
 
+  # The gateway's own Redis (ADR-0014): jti blacklist and rate limit buckets. Cache only, no persistence;
+  # reachable only on ticketpro-gateway-data.
+  gateway-redis:
+    image: redis:8.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks: [gateway-data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
 networks:
   edge:
     name: ticketpro-edge
   backend:
     name: ticketpro-backend
+  gateway-data:
+    name: ticketpro-gateway-data
+    internal: true

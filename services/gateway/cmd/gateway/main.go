@@ -13,6 +13,9 @@ import (
 	"github.com/ticketpro/gateway/internal/app"
 	"github.com/ticketpro/gateway/internal/jwtauth"
 	"github.com/ticketpro/gateway/internal/proxy"
+	"github.com/ticketpro/gateway/internal/revocation"
+
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -35,6 +38,17 @@ func main() {
 		Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, ClockSkew: cfg.ClockSkew,
 		CacheTTL: cfg.JWKSCacheTTL, RefetchMinInterval: 10 * time.Second,
 	}, jwtauth.HTTPFetcher(cfg.JWKSURL, &http.Client{Timeout: cfg.UpstreamTimeout}))
+	redisOpts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		logger.Error("invalid_config", "error", err.Error())
+		os.Exit(1)
+	}
+	redisOpts.DialTimeout, redisOpts.ReadTimeout, redisOpts.WriteTimeout = cfg.RedisTimeout, cfg.RedisTimeout, cfg.RedisTimeout
+	redisOpts.MaxRetries = -1 // a slow Redis must fail open fast, not retry inside the request
+	rdb := redis.NewClient(redisOpts)
+	defer func() { _ = rdb.Close() }()
+	revocations := revocation.Store{Client: rdb}
+
 	edge := proxy.New(proxy.Config{
 		Routes: cfg.Routes,
 		// RFC 0002 §5.5: the only routes without a token (refresh arrives in F3).
@@ -42,6 +56,7 @@ func main() {
 		MaxBodyBytes:    cfg.MaxBodyBytes,
 		UpstreamTimeout: cfg.UpstreamTimeout,
 		Verifier:        verifier,
+		Revocations:     revocations,
 		Logger:          logger,
 	})
 

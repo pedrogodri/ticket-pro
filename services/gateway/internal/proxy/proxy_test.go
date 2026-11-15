@@ -139,3 +139,48 @@ func TestUpstreamDownIs502(t *testing.T) {
 		t.Fatalf("status %d, want 502", rec.Code)
 	}
 }
+
+type fakeRevocations struct {
+	revoked map[string]bool
+	err     error
+}
+
+func (f fakeRevocations) IsRevoked(_ context.Context, jti string) (bool, error) {
+	return f.revoked[jti], f.err
+}
+
+func handlerWith(t *testing.T, s *seen, mutate func(*Config)) http.Handler {
+	u := upstream(t, s, 0)
+	cfg := Config{
+		Routes:          map[string]*url.URL{"auth": u, "orders": u, "events": u, "me": u},
+		Public:          map[string]bool{"POST /auth/register": true, "POST /auth/login": true},
+		MaxBodyBytes:    65536,
+		UpstreamTimeout: 500 * time.Millisecond,
+		Verifier:        fakeVerifier{},
+		Logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	mutate(&cfg)
+	return New(cfg)
+}
+
+func TestRevokedTokenIsRejected(t *testing.T) {
+	var s seen
+	h := handlerWith(t, &s, func(c *Config) { c.Revocations = fakeRevocations{revoked: map[string]bool{"j-1": true}} })
+	rec := do(h, "GET", "/me", "good", "", nil)
+	if rec.Code != 401 || !strings.Contains(rec.Body.String(), "UNAUTHENTICATED") || s.called {
+		t.Fatalf("status %d body %s forwarded=%v", rec.Code, rec.Body, s.called)
+	}
+}
+
+func TestRevocationStoreDownFailsOpen(t *testing.T) {
+	var s seen
+	var logs strings.Builder
+	h := handlerWith(t, &s, func(c *Config) {
+		c.Revocations = fakeRevocations{err: io.ErrUnexpectedEOF}
+		c.Logger = slog.New(slog.NewTextHandler(&logs, nil))
+	})
+	rec := do(h, "GET", "/me", "good", "", nil)
+	if rec.Code != 200 || !s.called || !strings.Contains(logs.String(), "revocation_check_unavailable") {
+		t.Fatalf("status %d forwarded=%v logs %s", rec.Code, s.called, logs.String())
+	}
+}
