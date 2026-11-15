@@ -20,7 +20,22 @@ public sealed class ProgramTests : IClassFixture<ProgramTests.Factory>
             builder.UseSetting("PAYMENTS_TOPIC_ARN", "arn:aws:sns:us-east-1:000000000000:ticketpro-payments");
             builder.UseSetting("AWS_ENDPOINT_URL", "http://127.0.0.1:1");
             builder.UseSetting("AWS_REGION", "us-east-1");
+            builder.UseSetting("QUEUE_URL", "http://127.0.0.1:1/000000000000/q");
+            builder.UseSetting("CONTRACTS_DIR", ContractsDir());
         }
+    }
+
+    private static string ContractsDir()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "contracts");
+            if (File.Exists(Path.Combine(candidate, ".vendored.json")))
+            {
+                return candidate;
+            }
+        }
+        throw new DirectoryNotFoundException("contracts/");
     }
 
     private readonly HttpClient _client;

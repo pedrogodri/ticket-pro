@@ -14,13 +14,21 @@ public sealed record AppConfig(
     string DatabaseWorkerUrl,
     string TopicArn,
     OutboxRelayOptions Outbox,
-    TimeSpan HttpClientTimeout)
+    TimeSpan HttpClientTimeout,
+    string QueueUrl,
+    string ContractsDir,
+    int ConsumerConcurrency,
+    int SqsWaitTimeSeconds,
+    PaymentSettings Payment)
 {
     /// <summary>Variables read by <see cref="FromEnvironment"/>.</summary>
     public static readonly string[] Variables =
     [
         "SERVICE_NAME", "PORT", "LOG_LEVEL", "DATABASE_URL", "DATABASE_WORKER_URL", "PAYMENTS_TOPIC_ARN",
         "OUTBOX_POLL_INTERVAL_MS", "OUTBOX_BATCH_SIZE", "OUTBOX_MAX_BACKOFF_MS", "OUTBOX_CLAIM_LEASE_MS", "HTTP_CLIENT_TIMEOUT_MS",
+        "QUEUE_URL", "CONTRACTS_DIR", "CONSUMER_CONCURRENCY", "SQS_WAIT_TIME_S",
+        "PAYMENT_LATENCY_MS", "PAYMENT_LATENCY_JITTER_MS", "PAYMENT_FAILURE_RATE", "PAYMENT_PROVIDER_TIMEOUT_MS",
+        "PAYMENT_WORKER_LEASE_MS", "PAYMENT_WORKER_POLL_MS",
     ];
 
     private static readonly string[] LogLevels = ["debug", "info", "warn", "error"];
@@ -57,7 +65,18 @@ public sealed record AppConfig(
                 MaxBackoff = Millis(env, "OUTBOX_MAX_BACKOFF_MS", 30000),
                 ClaimLease = Millis(env, "OUTBOX_CLAIM_LEASE_MS", 30000),
             },
-            Millis(env, "HTTP_CLIENT_TIMEOUT_MS", 3000));
+            Millis(env, "HTTP_CLIENT_TIMEOUT_MS", 3000),
+            Required(env, "QUEUE_URL"),
+            Required(env, "CONTRACTS_DIR"),
+            PositiveInt(env, "CONSUMER_CONCURRENCY", 4),
+            PositiveInt(env, "SQS_WAIT_TIME_S", 10),
+            new PaymentSettings(
+                MillisOrZero(env, "PAYMENT_LATENCY_MS", 500),
+                MillisOrZero(env, "PAYMENT_LATENCY_JITTER_MS", 300),
+                Rate(env, "PAYMENT_FAILURE_RATE", 0.1),
+                Millis(env, "PAYMENT_PROVIDER_TIMEOUT_MS", 8000),
+                Millis(env, "PAYMENT_WORKER_LEASE_MS", 30000),
+                Millis(env, "PAYMENT_WORKER_POLL_MS", 200)));
     }
 
     /// <summary>Converts postgres://user:pass@host[:port]/db (docs/padroes.md §3.1) to an Npgsql connection string.</summary>
@@ -89,6 +108,37 @@ public sealed record AppConfig(
             : throw new InvalidOperationException($"{name} must be a positive integer, got '{raw}'");
     }
 
+    private static TimeSpan MillisOrZero(IReadOnlyDictionary<string, string?> env, string name, int fallback)
+    {
+        if (!env.TryGetValue(name, out var raw) || string.IsNullOrWhiteSpace(raw))
+        {
+            return TimeSpan.FromMilliseconds(fallback);
+        }
+        return int.TryParse(raw, NumberStyles.None, CultureInfo.InvariantCulture, out var n)
+            ? TimeSpan.FromMilliseconds(n)
+            : throw new InvalidOperationException($"{name} must be a non-negative integer, got '{raw}'");
+    }
+
+    private static double Rate(IReadOnlyDictionary<string, string?> env, string name, double fallback)
+    {
+        if (!env.TryGetValue(name, out var raw) || string.IsNullOrWhiteSpace(raw))
+        {
+            return fallback;
+        }
+        return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var r) && r is >= 0 and <= 1
+            ? r
+            : throw new InvalidOperationException($"{name} must be a number between 0 and 1, got '{raw}'");
+    }
+
     private static TimeSpan Millis(IReadOnlyDictionary<string, string?> env, string name, int fallback) =>
         TimeSpan.FromMilliseconds(PositiveInt(env, name, fallback));
 }
+
+/// <summary>Simulated provider and worker settings (RFC 0003 §5.1, R5).</summary>
+public sealed record PaymentSettings(
+    TimeSpan Latency,
+    TimeSpan Jitter,
+    double FailureRate,
+    TimeSpan ProviderTimeout,
+    TimeSpan WorkerLease,
+    TimeSpan WorkerPoll);

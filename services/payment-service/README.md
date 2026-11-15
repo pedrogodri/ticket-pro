@@ -4,7 +4,7 @@ Pagamentos do Ticket Pro, em C# com .NET 10. Simula um provedor de pagamento len
 
 **Dono:** Gabriel.
 
-**Estado:** plataforma pronta (F1): banco com migrations Flyway, outbox + relay (`Platform/`, vendorizado de `shared/dotnet`) e readiness com `db`/`broker`. O consumidor, o worker com lease e o provedor simulado chegam na F2.
+**Estado:** F2: consumidor de `PaymentRequested` (grava `PENDING` e dá ack), worker com lease (`SKIP LOCKED`) e provedor simulado com latência, jitter, taxa de falha e timeout duro, publicando `PaymentApproved`/`PaymentFailed` pelo outbox. Estorno chega na F3.
 
 ## Responsabilidades
 

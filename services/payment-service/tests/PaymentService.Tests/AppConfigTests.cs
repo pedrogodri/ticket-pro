@@ -12,6 +12,8 @@ public class AppConfigTests
         ["DATABASE_URL"] = "postgres://payments_app:secret@payments-db:5432/payments",
         ["DATABASE_WORKER_URL"] = "postgres://payments_worker:secret@payments-db:5432/payments",
         ["PAYMENTS_TOPIC_ARN"] = "arn:aws:sns:us-east-1:000000000000:ticketpro-payments",
+        ["QUEUE_URL"] = "http://ministack:4566/000000000000/ticketpro-payment-service",
+        ["CONTRACTS_DIR"] = "/contracts",
     };
 
     [Theory]
@@ -21,6 +23,8 @@ public class AppConfigTests
     [InlineData("DATABASE_URL")]
     [InlineData("DATABASE_WORKER_URL")]
     [InlineData("PAYMENTS_TOPIC_ARN")]
+    [InlineData("QUEUE_URL")]
+    [InlineData("CONTRACTS_DIR")]
     public void MissingRequiredVariable_ThrowsNamingIt(string name)
     {
         var env = ValidEnv();
@@ -35,6 +39,8 @@ public class AppConfigTests
     [InlineData("OUTBOX_BATCH_SIZE", "0")]
     [InlineData("OUTBOX_POLL_INTERVAL_MS", "soon")]
     [InlineData("DATABASE_URL", "mysql://x")]
+    [InlineData("PAYMENT_FAILURE_RATE", "1.5")]
+    [InlineData("PAYMENT_FAILURE_RATE", "abc")]
     public void InvalidValue_ThrowsNamingIt(string name, string value)
     {
         var env = ValidEnv();
@@ -58,6 +64,10 @@ public class AppConfigTests
         Assert.Equal(TimeSpan.FromSeconds(30), config.Outbox.MaxBackoff);
         Assert.Equal(TimeSpan.FromSeconds(30), config.Outbox.ClaimLease);
         Assert.Equal(TimeSpan.FromSeconds(3), config.HttpClientTimeout);
+        Assert.Equal(4, config.ConsumerConcurrency);
+        Assert.Equal(10, config.SqsWaitTimeSeconds);
+        Assert.Equal(new PaymentSettings(TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(300), 0.1,
+            TimeSpan.FromMilliseconds(8000), TimeSpan.FromMilliseconds(30000), TimeSpan.FromMilliseconds(200)), config.Payment);
     }
 
     [Theory]
