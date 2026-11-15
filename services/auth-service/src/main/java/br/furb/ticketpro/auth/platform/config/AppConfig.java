@@ -28,7 +28,21 @@ public record AppConfig(
     OutboxRelayProperties outbox,
     Duration httpClientTimeout,
     String awsRegion,
-    Optional<String> awsEndpointUrl) {
+    Optional<String> awsEndpointUrl,
+    Jwt jwt,
+    Argon2 argon2) {
+
+  /** JWT settings (RFC 0002 §5.2–5.4). */
+  public record Jwt(
+      String secretId,
+      String issuer,
+      String audience,
+      long accessTtlSeconds,
+      long refreshTtlSeconds,
+      Duration keyRefresh) {}
+
+  /** Argon2id parameters (RFC 0002 §5.1). */
+  public record Argon2(int memoryKb, int iterations, int parallelism) {}
 
   private static final Set<String> LOG_LEVELS = Set.of("debug", "info", "warn", "error");
 
@@ -62,7 +76,23 @@ public record AppConfig(
         required(env, "AWS_REGION"),
         Optional.ofNullable(env.apply("AWS_ENDPOINT_URL"))
             .map(String::trim)
-            .filter(s -> !s.isEmpty()));
+            .filter(s -> !s.isEmpty()),
+        new Jwt(
+            required(env, "JWT_SECRET_ID"),
+            optional(env, "JWT_ISSUER", "ticketpro-auth"),
+            optional(env, "JWT_AUDIENCE", "ticketpro-api"),
+            integer(env, "JWT_ACCESS_TTL_S", 900, 1, Integer.MAX_VALUE),
+            integer(env, "JWT_REFRESH_TTL_S", 604800, 1, Integer.MAX_VALUE),
+            Duration.ofSeconds(integer(env, "JWT_KEY_REFRESH_S", 300, 1, Integer.MAX_VALUE))),
+        new Argon2(
+            integer(env, "ARGON2_MEMORY_KB", 19456, 1024, Integer.MAX_VALUE),
+            integer(env, "ARGON2_ITERATIONS", 2, 1, 100),
+            integer(env, "ARGON2_PARALLELISM", 1, 1, 64)));
+  }
+
+  private static String optional(Function<String, String> env, String name, String fallback) {
+    String value = env.apply(name);
+    return value == null || value.isBlank() ? fallback : value.trim();
   }
 
   private static String required(Function<String, String> env, String name) {

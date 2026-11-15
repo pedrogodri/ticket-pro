@@ -22,6 +22,7 @@
 		<google-java-format.version>2.0.0</google-java-format.version>
 		<awssdk.version>2.57.6</awssdk.version>
 		<json-schema-validator.version>3.0.8</json-schema-validator.version>
+		<bouncycastle.version>1.86</bouncycastle.version>
 	</properties>
 
 	<dependencyManagement>
@@ -67,6 +68,20 @@
 		<dependency>
 			<groupId>io.opentelemetry</groupId>
 			<artifactId>opentelemetry-api</artifactId>
+		</dependency>
+		<!-- Domain (F2): Argon2id password hashing and Secrets Manager for the JWT key. -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.bouncycastle</groupId>
+			<artifactId>bcprov-jdk18on</artifactId>
+			<version>${bouncycastle.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>secretsmanager</artifactId>
 		</dependency>
 
 		<dependency>

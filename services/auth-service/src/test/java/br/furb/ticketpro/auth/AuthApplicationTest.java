@@ -22,9 +22,14 @@ import org.springframework.web.client.RestClientResponseException;
       "DATABASE_WORKER_URL=postgres://auth_worker:x@127.0.0.1:1/auth",
       "AUTH_TOPIC_ARN=arn:aws:sns:us-east-1:000000000000:ticketpro-auth",
       "AWS_REGION=us-east-1",
-      "AWS_ENDPOINT_URL=http://127.0.0.1:1"
+      "AWS_ENDPOINT_URL=http://127.0.0.1:1",
+      "JWT_SECRET_ID=ticketpro/auth/jwt-signing-key"
     })
 class AuthApplicationTest {
+
+  // The real key comes from Secrets Manager, unreachable here; this test is about the database.
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
+  private br.furb.ticketpro.auth.modules.keys.SigningKeys signingKeys;
 
   @LocalServerPort private int port;
 
