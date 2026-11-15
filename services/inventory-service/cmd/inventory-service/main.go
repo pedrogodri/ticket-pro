@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ticketpro/inventory-service/internal/app"
+	"github.com/ticketpro/inventory-service/internal/modules/catalog"
 	"github.com/ticketpro/inventory-service/internal/platform/logging"
 	"github.com/ticketpro/inventory-service/internal/platform/messaging"
 	"github.com/ticketpro/inventory-service/internal/platform/outbox"
@@ -82,7 +83,13 @@ func run(ctx context.Context, cfg app.Config, logger *slog.Logger) error {
 		}
 	}()
 
-	err = app.Run(ctx, cfg, logger, app.NewHealthHandler(appPool, relay))
+	catalogHandler := catalog.NewHandler(catalog.NewRepository(appPool))
+	mux := http.NewServeMux()
+	mux.Handle("/health/", app.NewHealthHandler(appPool, relay))
+	mux.Handle("/events", catalogHandler)
+	mux.Handle("/events/", catalogHandler)
+
+	err = app.Run(ctx, cfg, logger, mux)
 	cancel() // also stops the relay when the HTTP server fails on its own
 	wg.Wait()
 	return err
