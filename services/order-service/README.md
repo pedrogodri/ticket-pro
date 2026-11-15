@@ -4,7 +4,7 @@ API assíncrona de pedidos e orquestrador da saga de compra do Ticket Pro, em Ty
 
 **Dono:** Matheus.
 
-**Estado:** plataforma pronta (F1): camada `src/platform/` em TS (envelope, outbox + relay, consumidor idempotente), banco com migrations Flyway e readiness com `db`/`broker`. A API e a saga chegam na F2.
+**Estado:** F2: API de pedidos (`POST /orders` 202 + `Idempotency-Key`, `GET /orders/{id}`, `GET /orders`) e saga (reserva → pagamento → confirmação; estoque rejeitado ou pagamento recusado cancelam). Deadline scanner e estorno tardio chegam na F3.
 
 ## Responsabilidades
 

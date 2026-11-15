@@ -9,6 +9,8 @@ const validEnv = (): NodeJS.ProcessEnv => ({
   DATABASE_WORKER_URL: "postgres://orders_worker:secret@orders-db:5432/orders",
   ORDERS_TOPIC_ARN: "arn:aws:sns:us-east-1:000000000000:ticketpro-orders",
   AWS_REGION: "us-east-1",
+  QUEUE_URL: "http://ministack:4566/000000000000/ticketpro-order-service",
+  CONTRACTS_DIR: "/app/contracts",
 });
 
 describe("loadConfig", () => {
@@ -20,6 +22,8 @@ describe("loadConfig", () => {
     "DATABASE_WORKER_URL",
     "ORDERS_TOPIC_ARN",
     "AWS_REGION",
+    "QUEUE_URL",
+    "CONTRACTS_DIR",
   ])("fails naming %s when missing", (name) => {
     expect(() => loadConfig({ ...validEnv(), [name]: undefined })).toThrow(new RegExp(name));
   });
@@ -48,6 +52,10 @@ describe("loadConfig", () => {
       awsRegion: "us-east-1",
       awsEndpointUrl: undefined,
       maxQuantity: 6,
+      queueUrl: "http://ministack:4566/000000000000/ticketpro-order-service",
+      contractsDir: "/app/contracts",
+      consumer: { concurrency: 4, waitTimeSeconds: 10 },
+      paymentTimeoutMs: 15_000,
     });
   });
 

@@ -21,6 +21,11 @@ export interface Config {
   awsEndpointUrl: string | undefined;
   /** ORDER_MAX_QUANTITY: input limit for POST /orders (the database CHECK stays 1..6). */
   maxQuantity: number;
+  queueUrl: string;
+  contractsDir: string;
+  consumer: { concurrency: number; waitTimeSeconds: number };
+  /** ORDER_PAYMENT_TIMEOUT_MS: deadline from AWAITING_PAYMENT (RFC 0003 §5.1). */
+  paymentTimeoutMs: number;
 }
 
 const required = (name: string) => z.string().trim().min(1, `${name} is required`);
@@ -50,6 +55,11 @@ const envSchema = z.object({
   DATABASE_WORKER_URL: postgresUrl("DATABASE_WORKER_URL"),
   ORDERS_TOPIC_ARN: required("ORDERS_TOPIC_ARN"),
   AWS_REGION: required("AWS_REGION"),
+  QUEUE_URL: required("QUEUE_URL"),
+  CONTRACTS_DIR: required("CONTRACTS_DIR"),
+  CONSUMER_CONCURRENCY: positiveInt("CONSUMER_CONCURRENCY", 4),
+  SQS_WAIT_TIME_S: positiveInt("SQS_WAIT_TIME_S", 10),
+  ORDER_PAYMENT_TIMEOUT_MS: positiveInt("ORDER_PAYMENT_TIMEOUT_MS", 15_000),
   AWS_ENDPOINT_URL: z.string().trim().optional(),
   OUTBOX_BATCH_SIZE: positiveInt("OUTBOX_BATCH_SIZE", 50),
   OUTBOX_POLL_INTERVAL_MS: positiveInt("OUTBOX_POLL_INTERVAL_MS", 200),
@@ -82,6 +92,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     DATABASE_WORKER_URL: input["DATABASE_WORKER_URL"] ?? "",
     ORDERS_TOPIC_ARN: input["ORDERS_TOPIC_ARN"] ?? "",
     AWS_REGION: input["AWS_REGION"] ?? "",
+    QUEUE_URL: input["QUEUE_URL"] ?? "",
+    CONTRACTS_DIR: input["CONTRACTS_DIR"] ?? "",
   });
   if (!parsed.success) {
     const problems = parsed.error.issues.map(
@@ -107,5 +119,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     awsRegion: e.AWS_REGION,
     awsEndpointUrl: e.AWS_ENDPOINT_URL || undefined,
     maxQuantity: e.ORDER_MAX_QUANTITY,
+    queueUrl: e.QUEUE_URL,
+    contractsDir: e.CONTRACTS_DIR,
+    consumer: { concurrency: e.CONSUMER_CONCURRENCY, waitTimeSeconds: e.SQS_WAIT_TIME_S },
+    paymentTimeoutMs: e.ORDER_PAYMENT_TIMEOUT_MS,
   };
 }
