@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,9 +13,12 @@ import (
 
 	"github.com/ticketpro/gateway/internal/app"
 	"github.com/ticketpro/gateway/internal/jwtauth"
+	"github.com/ticketpro/gateway/internal/platform/envelope"
+	"github.com/ticketpro/gateway/internal/platform/messaging"
 	"github.com/ticketpro/gateway/internal/proxy"
 	"github.com/ticketpro/gateway/internal/revocation"
 
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -60,7 +64,28 @@ func main() {
 		Logger:          logger,
 	})
 
-	if err := app.Run(ctx, cfg, logger, edge); err != nil {
+	awsCfg, err := messaging.NewAWSConfig(ctx, cfg.HTTPClientTimeout)
+	if err != nil {
+		logger.Error("aws_config_failed", "error", err.Error())
+		os.Exit(1)
+	}
+	validator, err := envelope.NewValidator(cfg.ContractsDir)
+	if err != nil {
+		logger.Error("contracts_load_failed", "error", err.Error())
+		os.Exit(1)
+	}
+	consumer := revocation.NewConsumer(revocation.ConsumerConfig{
+		Queue: sqs.NewFromConfig(awsCfg), QueueURL: cfg.QueueURL, Store: revocations,
+		Validator: validator, WaitTimeS: cfg.SQSWaitTimeS, Logger: logger,
+	})
+	go func() {
+		if err := consumer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("consumer_stopped", "error", err.Error())
+		}
+	}()
+
+	health := app.NewHealthHandler(redisPinger{rdb}, consumer)
+	if err := app.Run(ctx, cfg, logger, health, edge); err != nil {
 		logger.Error("server_failed", "error", err.Error())
 		os.Exit(1)
 	}
@@ -83,3 +108,8 @@ func healthcheck() int {
 	}
 	return 0
 }
+
+// redisPinger adapts the Redis client to app.Pinger.
+type redisPinger struct{ client *redis.Client }
+
+func (p redisPinger) Ping(ctx context.Context) error { return p.client.Ping(ctx).Err() }

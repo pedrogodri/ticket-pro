@@ -13,8 +13,7 @@ const shutdownTimeout = 10 * time.Second
 
 // Run serves HTTP until ctx is cancelled, then shuts down gracefully.
 // The gateway answers its own probes; every other path goes to the edge handler (routing + JWT).
-func Run(ctx context.Context, cfg Config, logger *slog.Logger, edge http.Handler) error {
-	health := NewHealthHandler()
+func Run(ctx context.Context, cfg Config, logger *slog.Logger, health, edge http.Handler) error {
 	mux := http.NewServeMux()
 	mux.Handle("GET /health/live", health)
 	mux.Handle("GET /health/ready", health)

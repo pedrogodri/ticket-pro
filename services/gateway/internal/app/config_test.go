@@ -14,6 +14,8 @@ func validEnv() map[string]string {
 		"GATEWAY_ROUTES": "auth=http://auth-service:8080,orders=http://order-service:8080",
 		"JWKS_URL":       "http://auth-service:8080/.well-known/jwks.json",
 		"REDIS_URL":      "redis://gateway-redis:6379/0",
+		"QUEUE_URL":      "http://ministack:4566/000000000000/ticketpro-gateway",
+		"CONTRACTS_DIR":  "/contracts",
 	}
 }
 
@@ -22,7 +24,7 @@ func load(env map[string]string) (Config, error) {
 }
 
 func TestLoadConfig_RequiredVariables(t *testing.T) {
-	for _, name := range []string{"SERVICE_NAME", "PORT", "LOG_LEVEL", "GATEWAY_ROUTES", "JWKS_URL", "REDIS_URL"} {
+	for _, name := range []string{"SERVICE_NAME", "PORT", "LOG_LEVEL", "GATEWAY_ROUTES", "JWKS_URL", "REDIS_URL", "QUEUE_URL", "CONTRACTS_DIR"} {
 		env := validEnv()
 		delete(env, name)
 		if _, err := load(env); err == nil || !strings.Contains(err.Error(), name) {

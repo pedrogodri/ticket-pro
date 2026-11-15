@@ -12,38 +12,46 @@ import (
 
 // Config is the validated runtime configuration read from environment variables.
 type Config struct {
-	ServiceName     string
-	Port            int
-	LogLevel        slog.Level
-	Routes          map[string]*url.URL // GATEWAY_ROUTES: segment=url,...
-	JWKSURL         string
-	JWTIssuer       string
-	JWTAudience     string
-	JWKSCacheTTL    time.Duration
-	ClockSkew       time.Duration
-	MaxBodyBytes    int64
-	UpstreamTimeout time.Duration
-	RedisURL        string        // REDIS_URL: the gateway's own Redis (revocation + rate limit)
-	RedisTimeout    time.Duration // REDIS_TIMEOUT_MS: per command; past it the check fails open
+	ServiceName       string
+	Port              int
+	LogLevel          slog.Level
+	Routes            map[string]*url.URL // GATEWAY_ROUTES: segment=url,...
+	JWKSURL           string
+	JWTIssuer         string
+	JWTAudience       string
+	JWKSCacheTTL      time.Duration
+	ClockSkew         time.Duration
+	MaxBodyBytes      int64
+	UpstreamTimeout   time.Duration
+	RedisURL          string        // REDIS_URL: the gateway's own Redis (revocation + rate limit)
+	RedisTimeout      time.Duration // REDIS_TIMEOUT_MS: per command; past it the check fails open
+	QueueURL          string        // QUEUE_URL: ticketpro-gateway (TokenRevoked)
+	ContractsDir      string        // CONTRACTS_DIR: vendored contracts for envelope validation
+	SQSWaitTimeS      int           // SQS_WAIT_TIME_S: long poll
+	HTTPClientTimeout time.Duration // HTTP_CLIENT_TIMEOUT_MS: AWS SDK calls
 }
 
 // LoadConfig reads and validates configuration. The returned error names the offending variable.
 func LoadConfig(getenv func(string) string) (Config, error) {
 	r := reader{getenv: getenv}
 	cfg := Config{
-		ServiceName:     r.required("SERVICE_NAME"),
-		Port:            r.port("PORT"),
-		LogLevel:        r.level("LOG_LEVEL"),
-		Routes:          r.routes("GATEWAY_ROUTES"),
-		JWKSURL:         r.required("JWKS_URL"),
-		JWTIssuer:       r.optional("JWT_ISSUER", "ticketpro-auth"),
-		JWTAudience:     r.optional("JWT_AUDIENCE", "ticketpro-api"),
-		JWKSCacheTTL:    time.Duration(r.positiveInt("JWKS_CACHE_TTL_S", 300)) * time.Second,
-		ClockSkew:       time.Duration(r.positiveInt("JWT_CLOCK_SKEW_S", 30)) * time.Second,
-		MaxBodyBytes:    int64(r.positiveInt("GATEWAY_MAX_BODY_BYTES", 65536)),
-		UpstreamTimeout: r.millis("GATEWAY_UPSTREAM_TIMEOUT_MS", 5000),
-		RedisURL:        r.redisURL("REDIS_URL"),
-		RedisTimeout:    r.millis("REDIS_TIMEOUT_MS", 200),
+		ServiceName:       r.required("SERVICE_NAME"),
+		Port:              r.port("PORT"),
+		LogLevel:          r.level("LOG_LEVEL"),
+		Routes:            r.routes("GATEWAY_ROUTES"),
+		JWKSURL:           r.required("JWKS_URL"),
+		JWTIssuer:         r.optional("JWT_ISSUER", "ticketpro-auth"),
+		JWTAudience:       r.optional("JWT_AUDIENCE", "ticketpro-api"),
+		JWKSCacheTTL:      time.Duration(r.positiveInt("JWKS_CACHE_TTL_S", 300)) * time.Second,
+		ClockSkew:         time.Duration(r.positiveInt("JWT_CLOCK_SKEW_S", 30)) * time.Second,
+		MaxBodyBytes:      int64(r.positiveInt("GATEWAY_MAX_BODY_BYTES", 65536)),
+		UpstreamTimeout:   r.millis("GATEWAY_UPSTREAM_TIMEOUT_MS", 5000),
+		RedisURL:          r.redisURL("REDIS_URL"),
+		RedisTimeout:      r.millis("REDIS_TIMEOUT_MS", 200),
+		QueueURL:          r.required("QUEUE_URL"),
+		ContractsDir:      r.required("CONTRACTS_DIR"),
+		SQSWaitTimeS:      r.positiveInt("SQS_WAIT_TIME_S", 10),
+		HTTPClientTimeout: r.millis("HTTP_CLIENT_TIMEOUT_MS", 3000),
 	}
 	if r.err != nil {
 		return Config{}, r.err
