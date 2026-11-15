@@ -192,7 +192,7 @@ public sealed class StructuredLogParityTests
         var formatter = new StandardJsonConsoleFormatter(Options.Create(new StandardJsonFormatterOptions { ServiceName = "s" }));
         using var writer = new StringWriter();
         formatter.Write(new LogEntry<State>(LogLevel.Warning, "cat", default, state, null, (_, _) => "x"), null, writer);
-        return JsonDocument.Parse(writer.ToString()).RootElement.Clone();
+        return JsonElement.Parse(writer.ToString());
     }
 
     // Review findings: the template's error value was dropped, and values were all strings.
