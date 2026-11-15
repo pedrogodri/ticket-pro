@@ -4,7 +4,7 @@ Ponto de entrada único do Ticket Pro, em Go. É o único serviço que publica p
 
 **Dono:** Pedro.
 
-**Estado:** esqueleto. Hoje só tem config validada, logs JSON e health checks.
+**Estado:** F2: roteamento por prefixo (`GATEWAY_ROUTES`), validação do JWT RS256 pelo JWKS do auth, troca dos headers de identidade, limite de corpo (413) e timeout de upstream (504). Rate limit e revogação (Redis) chegam na F3.
 
 ## Responsabilidades
 

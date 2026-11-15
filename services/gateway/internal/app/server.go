@@ -12,10 +12,16 @@ import (
 const shutdownTimeout = 10 * time.Second
 
 // Run serves HTTP until ctx is cancelled, then shuts down gracefully.
-func Run(ctx context.Context, cfg Config, logger *slog.Logger) error {
+// The gateway answers its own probes; every other path goes to the edge handler (routing + JWT).
+func Run(ctx context.Context, cfg Config, logger *slog.Logger, edge http.Handler) error {
+	health := NewHealthHandler()
+	mux := http.NewServeMux()
+	mux.Handle("GET /health/live", health)
+	mux.Handle("GET /health/ready", health)
+	mux.Handle("/", edge)
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           NewHealthHandler(),
+		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
