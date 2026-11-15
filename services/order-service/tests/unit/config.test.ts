@@ -30,6 +30,7 @@ describe("loadConfig", () => {
     ["OUTBOX_BATCH_SIZE", "0"],
     ["OUTBOX_POLL_INTERVAL_MS", "soon"],
     ["DATABASE_URL", "mysql://x"],
+    ["ORDER_MAX_QUANTITY", "7"],
   ])("fails naming %s when invalid (%s)", (name, value) => {
     expect(() => loadConfig({ ...validEnv(), [name]: value })).toThrow(new RegExp(name));
   });
@@ -46,6 +47,7 @@ describe("loadConfig", () => {
       httpClientTimeoutMs: 3000,
       awsRegion: "us-east-1",
       awsEndpointUrl: undefined,
+      maxQuantity: 6,
     });
   });
 

@@ -1,6 +1,7 @@
 import { SNSClient } from "@aws-sdk/client-sns";
 import { loadConfig, type Config } from "./app/config.js";
 import { buildServer } from "./app/server.js";
+import { registerOrderRoutes } from "./modules/orders/http/routes.js";
 import { createPool } from "./platform/db.js";
 import { createLogger } from "./platform/logging.js";
 import { awsClientConfig, SnsPublisher } from "./platform/publisher.js";
@@ -35,6 +36,12 @@ const app = buildServer(config, {
   },
   brokerUp: () => relay.brokerUp,
 });
+registerOrderRoutes(app, {
+  pool: appPool,
+  topicArn: config.topicArn,
+  maxQuantity: config.maxQuantity,
+});
+
 const relay = new OutboxRelay(workerPool, new SnsPublisher(sns), config.outbox, logger);
 const stopRelay = new AbortController();
 const relayDone = relay.run(stopRelay.signal);
