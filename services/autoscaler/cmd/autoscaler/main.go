@@ -10,7 +10,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+
 	"github.com/ticketpro/autoscaler/internal/app"
+	"github.com/ticketpro/autoscaler/internal/docker"
+	"github.com/ticketpro/autoscaler/internal/queue"
+	"github.com/ticketpro/autoscaler/internal/scaler"
 )
 
 func main() {
@@ -28,6 +34,20 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithHTTPClient(&http.Client{Timeout: cfg.HTTPClientTimeout}))
+	if err != nil {
+		logger.Error("aws_config_failed", "error", err.Error())
+		os.Exit(1)
+	}
+	loop := &scaler.Loop{
+		Targets: cfg.Targets, Policy: cfg.Policy, Interval: cfg.Interval, Logger: logger, Clock: time.Now,
+		Queue:  queue.NewReader(sqs.NewFromConfig(awsCfg)),
+		Docker: docker.NewUnixClient(cfg.DockerSocket, cfg.Project, cfg.HTTPClientTimeout*5),
+	}
+	logger.Info("autoscaler_started", "targets", fmt.Sprint(cfg.Targets), "min", cfg.Policy.Min, "max", cfg.Policy.Max,
+		"msgsPerReplica", cfg.Policy.MsgsPerReplica, "cooldownS", cfg.Policy.Cooldown.Seconds())
+	go func() { _ = loop.Run(ctx) }()
 
 	if err := app.Run(ctx, cfg, logger); err != nil {
 		logger.Error("server_failed", "error", err.Error())

@@ -43,9 +43,8 @@ func TestLoadConfig_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := Config{ServiceName: "autoscaler", Port: 8080, LogLevel: slog.LevelInfo}
-	if cfg != want {
-		t.Fatalf("got %+v, want %+v", cfg, want)
+	if cfg.ServiceName != "autoscaler" || cfg.Port != 8080 || cfg.LogLevel != slog.LevelInfo {
+		t.Fatalf("got %+v", cfg)
 	}
 }
 
