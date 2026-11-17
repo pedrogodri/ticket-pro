@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -126,22 +127,37 @@ func (c *Client) Clone(ctx context.Context, template Container, service string, 
 	if err := c.do(ctx, http.MethodPost, "/containers/create?name="+url.QueryEscape(name), body, &created); err != nil {
 		return err
 	}
-	for _, n := range networks[1:] {
+	err := c.finishClone(ctx, created.ID, networks[1:], alias)
+	if err != nil {
+		// A half-made clone keeps its name: remove it, or every later clone to the same number gets a 409.
+		_ = c.do(context.WithoutCancel(ctx), http.MethodDelete, "/containers/"+created.ID+"?force=true", nil, nil)
+	}
+	return err
+}
+
+func (c *Client) finishClone(ctx context.Context, id string, networks []string, alias map[string]any) error {
+	for _, n := range networks {
 		if err := c.do(ctx, http.MethodPost, "/networks/"+url.PathEscape(n)+"/connect",
-			map[string]any{"Container": created.ID, "EndpointConfig": alias}, nil); err != nil {
+			map[string]any{"Container": id, "EndpointConfig": alias}, nil); err != nil {
 			return err
 		}
 	}
-	return c.do(ctx, http.MethodPost, "/containers/"+created.ID+"/start", nil, nil)
+	return c.do(ctx, http.MethodPost, "/containers/"+id+"/start", nil, nil)
 }
 
 // Remove stops a replica (SIGTERM, then 10 s grace: in-flight messages return to the queue) and deletes it.
+// A container already gone (404) counts as removed.
 func (c *Client) Remove(ctx context.Context, id string) error {
-	if err := c.do(ctx, http.MethodPost, "/containers/"+id+"/stop?t=10", nil, nil); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/containers/"+id+"/stop?t=10", nil, nil); err != nil && !errors.Is(err, errNotFound) {
 		return err
 	}
-	return c.do(ctx, http.MethodDelete, "/containers/"+id+"?force=true", nil, nil)
+	if err := c.do(ctx, http.MethodDelete, "/containers/"+id+"?force=true", nil, nil); err != nil && !errors.Is(err, errNotFound) {
+		return err
+	}
+	return nil
 }
+
+var errNotFound = errors.New("not found")
 
 func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
 	var body io.Reader
@@ -166,7 +182,11 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 && resp.StatusCode != http.StatusNotModified {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("docker %s %s: %d %s", method, path, resp.StatusCode, strings.TrimSpace(string(msg)))
+		err := fmt.Errorf("docker %s %s: %d %s", method, path, resp.StatusCode, strings.TrimSpace(string(msg)))
+		if resp.StatusCode == http.StatusNotFound {
+			return errors.Join(errNotFound, err)
+		}
+		return err
 	}
 	if out != nil {
 		return json.NewDecoder(resp.Body).Decode(out)

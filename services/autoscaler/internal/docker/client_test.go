@@ -14,10 +14,11 @@ import (
 
 // fakeDaemon records calls and answers the Engine API endpoints the client uses.
 type fakeDaemon struct {
-	mu      sync.Mutex
-	calls   []string
-	created map[string]any
-	connect []map[string]any
+	failStart bool
+	mu        sync.Mutex
+	calls     []string
+	created   map[string]any
+	connect   []map[string]any
 }
 
 func (d *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -26,6 +27,8 @@ func (d *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d.calls = append(d.calls, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
 	body, _ := io.ReadAll(r.Body)
 	switch {
+	case d.failStart && strings.HasSuffix(r.URL.Path, "/start"):
+		http.Error(w, `{"message":"cannot start"}`, http.StatusInternalServerError)
 	case strings.HasPrefix(r.URL.Path, "/containers/gone/"):
 		http.Error(w, `{"message":"No such container: gone"}`, http.StatusNotFound)
 	case r.Method == "GET" && r.URL.Path == "/containers/json":
@@ -117,9 +120,31 @@ func TestRemoveStopsThenDeletes(t *testing.T) {
 	}
 }
 
-func TestDaemonErrorIsReturned(t *testing.T) {
+// A clone that fails after create must not leave a container behind: the next tick would hit a
+// 409 on the same name forever.
+func TestFailedCloneRemovesTheCreatedContainer(t *testing.T) {
+	c, d := newClient(t)
+	d.failStart = true
+	if err := c.Clone(context.Background(), Container{ID: "c1", Number: 1}, "payment-service", 3); err == nil {
+		t.Fatal("want the start error")
+	}
+	if !contains(d.calls, "DELETE /containers/new1?force=true") {
+		t.Fatalf("created container not removed: %v", d.calls)
+	}
+}
+
+// A replica already gone (removed by someone else) counts as removed.
+func TestRemoveOfAMissingContainerSucceeds(t *testing.T) {
 	c, _ := newClient(t)
-	if err := c.Remove(context.Background(), "gone"); err == nil {
+	if err := c.Remove(context.Background(), "gone"); err != nil {
+		t.Fatalf("want nil for a missing container, got %v", err)
+	}
+}
+
+func TestDaemonErrorIsReturned(t *testing.T) {
+	c, d := newClient(t)
+	d.failStart = true
+	if err := c.Clone(context.Background(), Container{ID: "c1", Number: 1}, "payment-service", 3); err == nil {
 		t.Fatal("want error from a non-2xx answer")
 	}
 }

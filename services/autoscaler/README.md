@@ -69,5 +69,8 @@ Sem Go instalado, os alvos rodam sozinhos no container `golang:1.25`. Para forç
 - Descer remove primeiro as de maior número e para cada uma com 10 s de graça; mensagens em voo voltam para a fila.
 - Toda decisão sai no log como `scale_decision` (`target`, `depth`, `current`, `desired`).
 - O container roda como root com o socket do Docker montado. É aceitável só para a demo local (ADR-0015).
+- Os clones levam as labels do compose. Um `docker compose up -d` ou `--scale` rodado depois volta o serviço para o número declarado no compose, e o autoscaler sobe de novo no próximo tick se a fila pedir. Durante a demo, não rode `compose up` no payment.
+- Um clone que falha no meio é apagado, para não travar o próximo com o mesmo nome. Uma réplica que já sumiu conta como removida.
+- A redução é sequencial e cada remoção espera até 10 s; nesse tempo, os outros alvos não são checados. Com um alvo só (o padrão), isso é aceitável.
 
 **Demo:** `scripts/demo-autoscale.sh`. Ela pausa as réplicas do compose, acumula 40 `PaymentRequested`, espera subir para 5 réplicas, drenar a fila e voltar a 2.
