@@ -18,11 +18,30 @@ import (
 
 const timeLayout = "2006-01-02T15:04:05.000Z"
 
+// orderCreated is the internal model: OrderCreated v2. Older versions are upcast to it, so there is
+// a single processing path (RFC 0001 §5.4).
 type orderCreated struct {
 	OrderID  string `json:"orderId"`
 	EventID  string `json:"eventId"`
 	SectorID string `json:"sectorId"`
 	Quantity int    `json:"quantity"`
+	Channel  string `json:"channel"`
+}
+
+// upcastOrderCreated reads v1 or v2 into the v2 model. v1 had no channel: every order came from the API.
+func upcastOrderCreated(env envelope.Envelope) (orderCreated, error) {
+	var in orderCreated
+	if err := json.Unmarshal(env.Payload, &in); err != nil {
+		return orderCreated{}, fmt.Errorf("%w: %v", envelope.ErrInvalidMessage, err)
+	}
+	switch env.Version {
+	case 1:
+		in.Channel = "API"
+	case 2:
+	default:
+		return orderCreated{}, fmt.Errorf("%w: OrderCreated v%d", envelope.ErrUnsupportedVersion, env.Version)
+	}
+	return in, nil
 }
 
 // OrderCreatedHandler reserves stock with a conditional UPDATE and answers InventoryReserved or
@@ -32,14 +51,14 @@ type OrderCreatedHandler struct {
 	TTL      time.Duration // RESERVATION_TTL_MS
 }
 
-// Versions supported (v2 and its upcaster arrive in F4).
-func (OrderCreatedHandler) Versions() []int { return []int{1} }
+// Versions supported: v1 through the upcaster, v2 natively.
+func (OrderCreatedHandler) Versions() []int { return []int{1, 2} }
 
 // Handle applies one OrderCreated.
 func (h OrderCreatedHandler) Handle(ctx context.Context, tx pgx.Tx, env envelope.Envelope) error {
-	var in orderCreated
-	if err := json.Unmarshal(env.Payload, &in); err != nil {
-		return fmt.Errorf("%w: %v", envelope.ErrInvalidMessage, err)
+	in, err := upcastOrderCreated(env)
+	if err != nil {
+		return err
 	}
 	reject := func(reason string) error {
 		return enqueue(ctx, tx, h.TopicARN, env.CorrelationID, "InventoryRejected", map[string]any{
@@ -53,7 +72,7 @@ func (h OrderCreatedHandler) Handle(ctx context.Context, tx pgx.Tx, env envelope
 	// R2: the decrement only happens when enough stock is left; concurrent buyers serialize on the row.
 	var unitPrice int64
 	var currency string
-	err := tx.QueryRow(ctx, `UPDATE sectors SET available = available - $1
+	err = tx.QueryRow(ctx, `UPDATE sectors SET available = available - $1
 		WHERE id = $2 AND event_id = $3 AND available >= $1
 		RETURNING unit_price_cents, currency`, in.Quantity, in.SectorID, in.EventID).Scan(&unitPrice, &currency)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -73,9 +92,9 @@ func (h OrderCreatedHandler) Handle(ctx context.Context, tx pgx.Tx, env envelope
 
 	reservationID, expiresAt := uuid.NewString(), time.Now().UTC().Add(h.TTL)
 	total := unitPrice * int64(in.Quantity)
-	if _, err := tx.Exec(ctx, `INSERT INTO reservations (id, order_id, sector_id, quantity, unit_price_cents, total_cents, status, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', $7)`,
-		reservationID, in.OrderID, in.SectorID, in.Quantity, unitPrice, total, expiresAt); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO reservations (id, order_id, sector_id, quantity, unit_price_cents, total_cents, status, expires_at, channel)
+		VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', $7, $8)`,
+		reservationID, in.OrderID, in.SectorID, in.Quantity, unitPrice, total, expiresAt, in.Channel); err != nil {
 		return err
 	}
 	return enqueue(ctx, tx, h.TopicARN, env.CorrelationID, "InventoryReserved", map[string]any{
