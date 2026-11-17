@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { Pool } from "pg";
 import { problem } from "../../../app/errors.js";
 import { correlationIdOf, requireUser } from "../../../app/identity.js";
+import type { OrderCreatedVersion } from "../../../app/config.js";
 import { createOrder } from "../application/createOrder.js";
 import { getOrder, InvalidCursorError, listOrders } from "../application/queries.js";
 import { createOrderBody, idempotencyKey, listQuery, orderId } from "./schemas.js";
@@ -10,6 +11,7 @@ export interface OrderRoutesDeps {
   pool: Pool; // API role (RLS)
   topicArn: string; // ORDERS_TOPIC_ARN
   maxQuantity: number; // ORDER_MAX_QUANTITY
+  orderCreatedVersion: OrderCreatedVersion; // ORDER_CREATED_VERSION
 }
 
 /** POST /orders (202, R3), GET /orders/{id} (owner only), GET /orders (paginated). */
@@ -45,6 +47,7 @@ export function registerOrderRoutes(app: FastifyInstance, deps: OrderRoutesDeps)
       input.data,
       key.data,
       deps.topicArn,
+      deps.orderCreatedVersion,
     );
     if (!created) return reply.code(200).send(order);
     return reply

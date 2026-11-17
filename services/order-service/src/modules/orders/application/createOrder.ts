@@ -1,4 +1,5 @@
 import type { Pool } from "pg";
+import type { OrderCreatedVersion } from "../../../app/config.js";
 import { v7 as uuidv7 } from "uuid";
 import { createEnvelope } from "../../../platform/envelope.js";
 import { enqueue } from "../../../platform/outbox.js";
@@ -12,7 +13,9 @@ import {
 const UNIQUE_VIOLATION = "23505";
 
 /**
- * Creates a PENDING order and enqueues OrderCreated v1 in one transaction (arquitetura §6 step 1, R3).
+ * Creates a PENDING order and enqueues OrderCreated in one transaction (arquitetura §6 step 1, R3).
+ * The version follows ORDER_CREATED_VERSION; v2 adds channel, always "API" because orders only enter
+ * through the HTTP API (RFC 0001 §5.5).
  * The same Idempotency-Key from the same user returns the existing order (created = false).
  */
 export async function createOrder(
@@ -22,6 +25,7 @@ export async function createOrder(
   input: CreateOrderInput,
   idempotencyKey: string,
   topicArn: string,
+  version: OrderCreatedVersion,
 ): Promise<{ order: OrderView; created: boolean }> {
   try {
     return await withUser(pool, userId, async (client) => {
@@ -36,10 +40,11 @@ export async function createOrder(
       await enqueue(
         client,
         topicArn,
-        createEnvelope(correlationId, "OrderCreated", 1, {
+        createEnvelope(correlationId, "OrderCreated", version, {
           orderId: order.orderId,
           userId,
           ...input,
+          ...(version === 2 ? { channel: "API" } : {}),
         }),
       );
       return { order, created: true };

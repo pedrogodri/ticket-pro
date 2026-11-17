@@ -35,6 +35,7 @@ describe("loadConfig", () => {
     ["OUTBOX_POLL_INTERVAL_MS", "soon"],
     ["DATABASE_URL", "mysql://x"],
     ["ORDER_MAX_QUANTITY", "7"],
+    ["ORDER_CREATED_VERSION", "3"],
   ])("fails naming %s when invalid (%s)", (name, value) => {
     expect(() => loadConfig({ ...validEnv(), [name]: value })).toThrow(new RegExp(name));
   });
@@ -56,6 +57,7 @@ describe("loadConfig", () => {
       contractsDir: "/app/contracts",
       consumer: { concurrency: 4, waitTimeSeconds: 10 },
       paymentTimeoutMs: 15_000,
+      orderCreatedVersion: 2,
     });
   });
 
@@ -69,5 +71,9 @@ describe("loadConfig", () => {
     expect(config.outbox.batchSize).toBe(10);
     expect(config.httpClientTimeoutMs).toBe(500);
     expect(config.awsEndpointUrl).toBe("http://ministack:4566");
+  });
+
+  it("publishes OrderCreated v1 when ORDER_CREATED_VERSION=1 (RFC 0001 §5.5 demo)", () => {
+    expect(loadConfig({ ...validEnv(), ORDER_CREATED_VERSION: "1" }).orderCreatedVersion).toBe(1);
   });
 });

@@ -44,6 +44,7 @@ registerOrderRoutes(app, {
   pool: appPool,
   topicArn: config.topicArn,
   maxQuantity: config.maxQuantity,
+  orderCreatedVersion: config.orderCreatedVersion,
 });
 
 const relay = new OutboxRelay(workerPool, new SnsPublisher(sns), config.outbox, logger);
