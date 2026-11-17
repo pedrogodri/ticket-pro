@@ -1,9 +1,15 @@
 package outbox
 
 import (
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ticketpro/platform/tracing"
 	"io"
 	"log/slog"
 	"math/rand/v2"
@@ -73,7 +79,7 @@ func (r *Relay) RunOnce(ctx context.Context) (published int, err error) {
 		if row.traceparent != nil {
 			tp = *row.traceparent
 		}
-		if pubErr := r.cfg.Publisher.Publish(ctx, row.topicARN, row.env, tp); pubErr != nil {
+		if pubErr := r.publish(ctx, row, tp); pubErr != nil {
 			r.setBroker(ctx, false, pubErr)
 			return published, errors.Join(pubErr, r.reschedule(ctx, row, pubErr), r.release(ctx, rows[i+1:]))
 		}
@@ -88,6 +94,27 @@ func (r *Relay) RunOnce(ctx context.Context) (published int, err error) {
 	}
 	return published, nil
 }
+
+// publish sends one row inside a producer span that continues the trace stored with the row, and
+// propagates that span as the message traceparent (ADR-0012).
+func (r *Relay) publish(ctx context.Context, row row, traceparent string) error {
+	spanCtx, span := otel.Tracer(tracerName).Start(tracing.Extract(ctx, traceparent), "publish "+row.env.Type,
+		trace.WithSpanKind(trace.SpanKindProducer),
+		trace.WithAttributes(
+			attribute.String("messaging.system", "aws_sns"),
+			attribute.String("messaging.destination.name", row.topicARN),
+			attribute.String("messaging.message.id", row.env.MessageID),
+		))
+	defer span.End()
+	if err := r.cfg.Publisher.Publish(spanCtx, row.topicARN, row.env, tracing.Inject(spanCtx)); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	return nil
+}
+
+const tracerName = "github.com/ticketpro/platform/outbox"
 
 // Run publishes until ctx is cancelled: PollInterval between batches, backoff after failures.
 func (r *Relay) Run(ctx context.Context) error {

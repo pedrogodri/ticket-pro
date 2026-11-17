@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/exaring/otelpgx"
+	"github.com/ticketpro/inventory-service/internal/platform/tracing"
 	"log/slog"
 	"net/http"
 	"os"
@@ -39,12 +41,36 @@ func main() {
 	}
 	logger := logging.New(os.Stdout, cfg.ServiceName, cfg.LogLevel)
 
+	serviceName := os.Getenv("OTEL_SERVICE_NAME")
+	if serviceName == "" {
+		serviceName = cfg.ServiceName
+	}
+	shutdownTracing, err := tracing.Setup(context.Background(), tracing.Config{
+		ServiceName: serviceName, Endpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+	})
+	if err != nil {
+		logger.Error("tracing_setup_failed", "error", err.Error())
+		os.Exit(1)
+	}
+	flushTracing := func() {
+		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdownTracing(flushCtx)
+	}
+	defer flushTracing()
+	// exit flushes pending spans first: os.Exit skips deferred calls, and the spans of a failure are the
+	// ones that explain it.
+	exit := func(code int) {
+		flushTracing()
+		os.Exit(code)
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	if err := run(ctx, cfg, logger); err != nil {
 		logger.Error("service_failed", "error", err.Error())
-		os.Exit(1)
+		exit(1)
 	}
 }
 
@@ -53,12 +79,12 @@ func run(ctx context.Context, cfg app.Config, logger *slog.Logger) error {
 	defer cancel()
 
 	// Pools connect lazily: the service starts even if the database is still coming up (readiness says so).
-	appPool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	appPool, err := newPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("DATABASE_URL: %w", err)
 	}
 	defer appPool.Close()
-	workerPool, err := pgxpool.New(ctx, cfg.DatabaseWorkerURL)
+	workerPool, err := newPool(ctx, cfg.DatabaseWorkerURL)
 	if err != nil {
 		return fmt.Errorf("DATABASE_WORKER_URL: %w", err)
 	}
@@ -147,4 +173,14 @@ func healthcheck() int {
 		return 1
 	}
 	return 0
+}
+
+// newPool opens a pool whose queries are traced as client spans (otelpgx, ADR-0012).
+func newPool(ctx context.Context, url string) (*pgxpool.Pool, error) {
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return nil, err
+	}
+	cfg.ConnConfig.Tracer = otelpgx.NewTracer()
+	return pgxpool.NewWithConfig(ctx, cfg)
 }
