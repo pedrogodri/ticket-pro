@@ -20,7 +20,11 @@ SECTOR=0193a6f0-4444-7000-8000-000000000004 # Pista: large stock
 USER=0193a6f0-1111-7000-8000-000000000001
 
 sql() { docker compose exec -T inventory-db psql -U inventory_owner -d inventory -tAc "$1"; }
-dlq_count() { awsl sqs get-queue-attributes --queue-url "$DLQ" --attribute-names ApproximateNumberOfMessages | jq -r '.Attributes.ApproximateNumberOfMessages'; }
+# in_dlq ORDER_ID: true when a DLQ message carries that orderId (peek: visibility 0, nothing deleted).
+in_dlq() {
+  awsl sqs receive-message --queue-url "$DLQ" --max-number-of-messages 10 --visibility-timeout 0 \
+    | jq -e --arg o "$1" '[.Messages[]?.Body | select(contains($o))] | length > 0' >/dev/null
+}
 
 # publish VERSION ORDER_ID [CHANNEL]
 publish() {
@@ -37,7 +41,7 @@ publish() {
 # wait_channel ORDER_ID → prints the reservation channel once it exists
 wait_channel() {
   local c=""
-  for _ in $(seq 1 40); do
+  for _ in $(seq 1 120); do # up to 30 s: the first long poll after boot can be slow
     c=$(sql "SELECT channel FROM reservations WHERE order_id = '$1'")
     [ -n "$c" ] && break
     sleep 0.25
@@ -46,7 +50,6 @@ wait_channel() {
 }
 
 V1=$(id); V2=$(id); V3=$(id)
-before_dlq=$(dlq_count)
 
 publish 1 "$V1"
 c=$(wait_channel "$V1")
@@ -59,7 +62,7 @@ c=$(wait_channel "$V2")
 publish 3 "$V3" MOBILE
 moved=""
 for _ in $(seq 1 60); do
-  [ "$(dlq_count)" -gt "$before_dlq" ] && { moved=yes; break; }
+  in_dlq "$V3" && { moved=yes; break; }
   sleep 0.5
 done
 [ -n "$moved" ] && pass "v3 rejected as poison → ticketpro-inventory-service-dlq" || fail "v3 did not reach the DLQ in 30s"
