@@ -4,7 +4,7 @@ Catálogo de eventos, estoque por setor, reservas e emissão de ingressos do Tic
 
 **Dono:** Pedro.
 
-**Estado:** F2: catálogo com seed (`GET /events`, `GET /events/{id}`), reserva atômica (`OrderCreated` → `InventoryReserved`/`InventoryRejected`), emissão de ingressos (`OrderConfirmed` → `TicketsIssued`) e devolução de estoque (`OrderCancelled`). Expiração de reservas e o upcaster v2 chegam na F3/F4.
+**Estado:** F2: catálogo com seed (`GET /events`, `GET /events/{id}`), reserva atômica (`OrderCreated` → `InventoryReserved`/`InventoryRejected`), emissão de ingressos (`OrderConfirmed` → `TicketsIssued`) e devolução de estoque (`OrderCancelled`). F3: job de expiração (`PENDING` vencida → `RELEASED`, estoque devolvido, `InventoryReservationExpired`), seguro em N réplicas (`SKIP LOCKED`), e boot recusado se `RESERVATION_TTL_MS < ORDER_PAYMENT_TIMEOUT_MS + RESERVATION_SAFETY_MARGIN_MS`. O upcaster v2 chega na F4.
 
 ## Responsabilidades
 
@@ -76,3 +76,13 @@ make run         # sobe só este serviço
 ```
 
 Sem Go instalado, os alvos rodam sozinhos no container `golang:1.25`. Para forçar: `make test TOOLCHAIN=docker`. Também há um Dev Container em [`.devcontainer/`](.devcontainer/devcontainer.json).
+
+### Expiração de reservas (F3)
+
+| Variável | Padrão | Uso |
+|---|---|---|
+| `RESERVATION_TTL_MS` | 60000 | validade da reserva |
+| `ORDER_PAYMENT_TIMEOUT_MS` | 15000 | mesmo valor do order-service; usado só na validação do boot |
+| `RESERVATION_SAFETY_MARGIN_MS` | 30000 | margem exigida acima do deadline |
+| `RESERVATION_EXPIRY_SCAN_INTERVAL_MS` | 1000 | intervalo do job |
+| `RESERVATION_EXPIRY_BATCH_SIZE` | 50 | reservas por transação |
