@@ -109,6 +109,16 @@ func run(ctx context.Context, cfg app.Config, logger *slog.Logger) error {
 		}
 	}()
 
+	expirer := reservations.Expirer{Pool: workerPool, TopicARN: cfg.TopicARN,
+		Interval: cfg.Expiry.Interval, BatchSize: cfg.Expiry.BatchSize, Logger: logger}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := expirer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("expirer_stopped", "error", err.Error())
+		}
+	}()
+
 	catalogHandler := catalog.NewHandler(catalog.NewRepository(appPool))
 	mux := http.NewServeMux()
 	mux.Handle("/health/", app.NewHealthHandler(appPool, app.AllUp(relay, consumer)))
