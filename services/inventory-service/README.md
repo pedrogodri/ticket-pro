@@ -89,3 +89,10 @@ Sem Go instalado, os alvos rodam sozinhos no container `golang:1.25`. Para forç
 | `RESERVATION_EXPIRY_BATCH_PAUSE_MS` | 50 | pausa entre lotes cheios |
 
 Se um `OrderConfirmed` encontrar a reserva já `RELEASED`, o inventory loga `order_confirmed_after_release` em ERROR: o cliente pagou e não recebeu ingressos.
+
+## Tracing
+
+OpenTelemetry ([ADR-0012](../../docs/adr/0012-opentelemetry-collector-jaeger.md)). `OTEL_EXPORTER_OTLP_ENDPOINT` (padrão `otel-collector:4317`) envia os spans ao collector, e de lá para o Jaeger (`http://localhost:16686`). Sem a variável, nada é exportado. `OTEL_SERVICE_NAME` é opcional; o padrão é `SERVICE_NAME`.
+- **HTTP:** um span por requisição (`otelhttp`), exceto `/health/*`.
+- **Banco:** spans das queries (`otelpgx`).
+- **Mensagens:** span `consumer` por mensagem, no trace do producer e com link para ele. Span `producer` por publicação do outbox, que propaga o `traceparent`.
