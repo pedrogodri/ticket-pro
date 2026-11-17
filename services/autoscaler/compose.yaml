@@ -4,6 +4,11 @@ services:
     build: .
     env_file: .env.example
     networks: [backend]
+    # ADR-0015: the Docker socket lets it start and stop replicas. It gives full control of the local
+    # Docker host, accepted for the demo only; root is needed to open the socket.
+    user: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "/autoscaler", "healthcheck"]
       interval: 5s
