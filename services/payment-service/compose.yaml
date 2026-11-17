@@ -6,6 +6,12 @@ services:
     deploy:
       replicas: 2
     env_file: .env.example
+    # Failure scenarios (RFC 0003 §5.6; scripts/f1, f7) override these from the shell; standalone keeps
+    # the .env.example values.
+    environment:
+      PAYMENT_FAILURE_RATE: ${PAYMENT_FAILURE_RATE:-0.1}
+      PAYMENT_LATENCY_MS: ${PAYMENT_LATENCY_MS:-500}
+      PAYMENT_PROVIDER_TIMEOUT_MS: ${PAYMENT_PROVIDER_TIMEOUT_MS:-8000}
     networks: [backend, payment-service-data]
     depends_on:
       payment-service-migrate:
