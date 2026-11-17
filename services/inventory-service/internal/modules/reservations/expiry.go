@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -89,10 +90,23 @@ func (e Expirer) RunOnce(ctx context.Context) (int, error) {
 		return 0, err
 	}
 
+	// One UPDATE per sector, always in sector id order: replicas whose batches share sectors then take
+	// the row locks in the same order and cannot deadlock (40P01).
+	returned := map[string]int{}
 	for _, r := range batch {
-		if _, err := tx.Exec(ctx, `UPDATE sectors SET available = available + $1 WHERE id = $2`, r.quantity, r.sectorID); err != nil {
+		returned[r.sectorID] += r.quantity
+	}
+	sectorIDs := make([]string, 0, len(returned))
+	for id := range returned {
+		sectorIDs = append(sectorIDs, id)
+	}
+	slices.Sort(sectorIDs)
+	for _, id := range sectorIDs {
+		if _, err := tx.Exec(ctx, `UPDATE sectors SET available = available + $1 WHERE id = $2`, returned[id], id); err != nil {
 			return 0, err
 		}
+	}
+	for _, r := range batch {
 		// The reservation does not keep the saga's correlationId; the order correlates by orderId.
 		if err := enqueue(ctx, tx, e.TopicARN, uuid.NewString(), "InventoryReservationExpired", map[string]any{
 			"orderId": r.orderID, "reservationId": r.id, "quantity": r.quantity,

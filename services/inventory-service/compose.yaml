@@ -6,6 +6,11 @@ services:
     deploy:
       replicas: 2
     env_file: .env.example
+    # Saga timing shared with order-service (arquitetura §6 step 9): the root .env sets one value for both;
+    # standalone (`make run`) falls back to the RFC 0003 defaults.
+    environment:
+      ORDER_PAYMENT_TIMEOUT_MS: ${ORDER_PAYMENT_TIMEOUT_MS:-15000}
+      RESERVATION_SAFETY_MARGIN_MS: ${RESERVATION_SAFETY_MARGIN_MS:-30000}
     networks: [backend, inventory-service-data]
     depends_on:
       inventory-service-migrate:

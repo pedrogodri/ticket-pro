@@ -169,3 +169,59 @@ func confirmation(order, sector string, quantity int) map[string]any {
 	return map[string]any{"orderId": order, "userId": userID, "eventId": eventID, "sectorId": sector, "quantity": quantity,
 		"totalCents": 15000 * quantity, "currency": "BRL", "confirmedAt": "2026-11-20T18:30:14.120Z"}
 }
+
+// Replicas whose batches touch the same sectors in different orders must not deadlock (40P01).
+func TestExpirer_ConcurrentScansAcrossSectorsDoNotDeadlock(t *testing.T) {
+	pool := setup(t)
+	expireAll(t, expirer(pool, 50))
+	sectors := []string{newSector(t, pool, 50), newSector(t, pool, 50), newSector(t, pool, 50), newSector(t, pool, 50)}
+	for i := range 80 {
+		// Interleave sectors and deadlines so each batch walks the sectors in a different order.
+		reserve(t, pool, sectors[(i*3)%len(sectors)], 1, -time.Duration(80-i)*time.Millisecond)
+	}
+	errs := make(chan error, 8)
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			e := expirer(pool, 7)
+			for {
+				n, err := e.RunOnce(context.Background())
+				if err != nil {
+					errs <- err
+					return
+				}
+				if n == 0 {
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("scan failed: %v", err)
+	}
+	for _, s := range sectors {
+		if n := available(t, pool, s); n != 50 {
+			t.Errorf("sector %s available %d, want 50", s, n)
+		}
+	}
+}
+
+// Review Focus 5: a failing scan is logged and Run keeps going until ctx is cancelled.
+func TestExpirer_RunSurvivesFailingScans(t *testing.T) {
+	pool := setup(t)
+	broken, err := pgxpool.New(context.Background(), pool.Config().ConnString())
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken.Close() // every Begin fails
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	e := reservations.Expirer{Pool: broken, TopicARN: topic, Interval: 20 * time.Millisecond, BatchSize: 10}
+	if err := e.Run(ctx); err != context.DeadlineExceeded {
+		t.Fatalf("Run returned %v before ctx ended", err)
+	}
+}
