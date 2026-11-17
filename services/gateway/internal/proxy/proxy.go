@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,11 +18,30 @@ import (
 
 	"github.com/ticketpro/gateway/internal/jwtauth"
 	"github.com/ticketpro/gateway/internal/problem"
+	"github.com/ticketpro/gateway/internal/ratelimit"
 )
 
 // TokenVerifier validates a bearer token.
 type TokenVerifier interface {
 	Verify(ctx context.Context, token string) (jwtauth.Claims, error)
+}
+
+// RevocationChecker reports whether a token id was revoked (ADR-0014).
+type RevocationChecker interface {
+	IsRevoked(ctx context.Context, jti string) (bool, error)
+}
+
+// RateLimiter takes one token from a bucket (internal/ratelimit).
+type RateLimiter interface {
+	Allow(ctx context.Context, key string, rule ratelimit.Rule) (ratelimit.Decision, error)
+}
+
+// Limits are the buckets per route class (RFC 0002 §5.8 API4/API6).
+type Limits struct {
+	Default ratelimit.Rule // authenticated, per user (RATE_LIMIT_*)
+	Public  ratelimit.Rule // public routes, per IP (RATE_LIMIT_PUBLIC_*)
+	Login   ratelimit.Rule // POST /auth/login, per IP, against brute force (AUTH_LOGIN_*)
+	Orders  ratelimit.Rule // POST /orders, per user, against scalping (ORDERS_*)
 }
 
 // Config configures the edge handler.
@@ -31,6 +51,9 @@ type Config struct {
 	MaxBodyBytes    int64               // GATEWAY_MAX_BODY_BYTES
 	UpstreamTimeout time.Duration       // GATEWAY_UPSTREAM_TIMEOUT_MS
 	Verifier        TokenVerifier
+	Revocations     RevocationChecker // nil: no revocation check
+	Limiter         RateLimiter       // nil: no rate limit
+	Limits          Limits
 	Logger          *slog.Logger
 }
 
@@ -78,7 +101,16 @@ func New(cfg Config) http.Handler {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, cfg.MaxBodyBytes)
 
-		if !cfg.Public[r.Method+" "+r.URL.Path] {
+		route := r.Method + " " + r.URL.Path
+		if cfg.Public[route] {
+			key, rule := "ip:"+clientIP(r), cfg.Limits.Public
+			if route == "POST /auth/login" {
+				key, rule = "login:"+clientIP(r), cfg.Limits.Login
+			}
+			if !allow(w, r, cfg, key, rule, correlationID) {
+				return
+			}
+		} else {
 			token, found := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 			claims, err := cfg.Verifier.Verify(r.Context(), strings.TrimSpace(token))
 			if !found || err != nil {
@@ -91,6 +123,25 @@ func New(cfg Config) http.Handler {
 				problem.Write(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", correlationID)
 				return
 			}
+			if cfg.Revocations != nil {
+				revoked, err := cfg.Revocations.IsRevoked(r.Context(), claims.ID)
+				if err != nil {
+					// Fail-open (ADR-0014): the exposure is bounded by the 15 min access token TTL.
+					cfg.Logger.Warn("revocation_check_unavailable", "error", err.Error(), "correlationId", correlationID)
+				} else if revoked {
+					cfg.Logger.Info("token_rejected", "reason", "token revoked", "path", r.URL.Path, "correlationId", correlationID)
+					w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+					problem.Write(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", correlationID)
+					return
+				}
+			}
+			key, rule := "user:"+claims.Subject, cfg.Limits.Default
+			if route == "POST /orders" {
+				key, rule = "orders:"+claims.Subject, cfg.Limits.Orders
+			}
+			if !allow(w, r, cfg, key, rule, correlationID) {
+				return
+			}
 			r.Header.Set("X-User-Id", claims.Subject)
 			r.Header.Set("X-User-Email", claims.Email)
 			w.Header().Set("Cache-Control", "no-store")
@@ -98,6 +149,36 @@ func New(cfg Config) http.Handler {
 		}
 		rp.ServeHTTP(w, r)
 	})
+}
+
+// allow applies the bucket; false means a 429 was written. Redis errors fail open (ADR-0014).
+func allow(w http.ResponseWriter, r *http.Request, cfg Config, key string, rule ratelimit.Rule, correlationID string) bool {
+	if cfg.Limiter == nil {
+		return true
+	}
+	d, err := cfg.Limiter.Allow(r.Context(), key, rule)
+	if err != nil {
+		cfg.Logger.Warn("rate_limit_unavailable", "error", err.Error(), "correlationId", correlationID)
+		return true
+	}
+	if d.Allowed {
+		return true
+	}
+	seconds := max(1, int((d.RetryAfter+time.Second-1)/time.Second))
+	cfg.Logger.Info("rate_limited", "key", key, "path", r.URL.Path, "correlationId", correlationID)
+	w.Header().Set("Retry-After", strconv.Itoa(seconds))
+	problem.Write(w, r, http.StatusTooManyRequests, "RATE_LIMITED", correlationID)
+	return false
+}
+
+// clientIP is the TCP peer. X-Forwarded-For is ignored: the gateway is the edge, so any value
+// in it came from the client and would let it pick its own bucket.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 
 // stripIdentity removes identity headers a client could forge (RFC 0002 §5.5 step 2).

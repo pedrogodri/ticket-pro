@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,7 +13,14 @@ import (
 
 	"github.com/ticketpro/gateway/internal/app"
 	"github.com/ticketpro/gateway/internal/jwtauth"
+	"github.com/ticketpro/gateway/internal/platform/envelope"
+	"github.com/ticketpro/gateway/internal/platform/messaging"
 	"github.com/ticketpro/gateway/internal/proxy"
+	"github.com/ticketpro/gateway/internal/ratelimit"
+	"github.com/ticketpro/gateway/internal/revocation"
+
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -35,6 +43,17 @@ func main() {
 		Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience, ClockSkew: cfg.ClockSkew,
 		CacheTTL: cfg.JWKSCacheTTL, RefetchMinInterval: 10 * time.Second,
 	}, jwtauth.HTTPFetcher(cfg.JWKSURL, &http.Client{Timeout: cfg.UpstreamTimeout}))
+	redisOpts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		logger.Error("invalid_config", "error", err.Error())
+		os.Exit(1)
+	}
+	redisOpts.DialTimeout, redisOpts.ReadTimeout, redisOpts.WriteTimeout = cfg.RedisTimeout, cfg.RedisTimeout, cfg.RedisTimeout
+	redisOpts.MaxRetries = -1 // a slow Redis must fail open fast, not retry inside the request
+	rdb := redis.NewClient(redisOpts)
+	defer func() { _ = rdb.Close() }()
+	revocations := revocation.Store{Client: rdb}
+
 	edge := proxy.New(proxy.Config{
 		Routes: cfg.Routes,
 		// RFC 0002 §5.5: the only routes without a token (refresh arrives in F3).
@@ -42,10 +61,37 @@ func main() {
 		MaxBodyBytes:    cfg.MaxBodyBytes,
 		UpstreamTimeout: cfg.UpstreamTimeout,
 		Verifier:        verifier,
-		Logger:          logger,
+		Revocations:     revocations,
+		Limiter:         ratelimit.Limiter{Client: rdb, Clock: time.Now},
+		Limits: proxy.Limits{
+			Default: rule(cfg.Limits.Default), Public: rule(cfg.Limits.Public),
+			Login: rule(cfg.Limits.Login), Orders: rule(cfg.Limits.Orders),
+		},
+		Logger: logger,
 	})
 
-	if err := app.Run(ctx, cfg, logger, edge); err != nil {
+	awsCfg, err := messaging.NewAWSConfig(ctx, cfg.HTTPClientTimeout)
+	if err != nil {
+		logger.Error("aws_config_failed", "error", err.Error())
+		os.Exit(1)
+	}
+	validator, err := envelope.NewValidator(cfg.ContractsDir)
+	if err != nil {
+		logger.Error("contracts_load_failed", "error", err.Error())
+		os.Exit(1)
+	}
+	consumer := revocation.NewConsumer(revocation.ConsumerConfig{
+		Queue: sqs.NewFromConfig(awsCfg), QueueURL: cfg.QueueURL, Store: revocations,
+		Validator: validator, WaitTimeS: cfg.SQSWaitTimeS, RequestTimeout: cfg.HTTPClientTimeout, Logger: logger,
+	})
+	go func() {
+		if err := consumer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("consumer_stopped", "error", err.Error())
+		}
+	}()
+
+	health := app.NewHealthHandler(redisPinger{rdb}, consumer)
+	if err := app.Run(ctx, cfg, logger, health, edge); err != nil {
 		logger.Error("server_failed", "error", err.Error())
 		os.Exit(1)
 	}
@@ -68,3 +114,10 @@ func healthcheck() int {
 	}
 	return 0
 }
+
+// redisPinger adapts the Redis client to app.Pinger.
+type redisPinger struct{ client *redis.Client }
+
+func (p redisPinger) Ping(ctx context.Context) error { return p.client.Ping(ctx).Err() }
+
+func rule(r app.Rule) ratelimit.Rule { return ratelimit.Rule{RPS: r.RPS, Burst: r.Burst} }

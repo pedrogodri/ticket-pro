@@ -13,6 +13,9 @@ func validEnv() map[string]string {
 		"LOG_LEVEL":      "info",
 		"GATEWAY_ROUTES": "auth=http://auth-service:8080,orders=http://order-service:8080",
 		"JWKS_URL":       "http://auth-service:8080/.well-known/jwks.json",
+		"REDIS_URL":      "redis://gateway-redis:6379/0",
+		"QUEUE_URL":      "http://ministack:4566/000000000000/ticketpro-gateway",
+		"CONTRACTS_DIR":  "/contracts",
 	}
 }
 
@@ -21,7 +24,7 @@ func load(env map[string]string) (Config, error) {
 }
 
 func TestLoadConfig_RequiredVariables(t *testing.T) {
-	for _, name := range []string{"SERVICE_NAME", "PORT", "LOG_LEVEL", "GATEWAY_ROUTES", "JWKS_URL"} {
+	for _, name := range []string{"SERVICE_NAME", "PORT", "LOG_LEVEL", "GATEWAY_ROUTES", "JWKS_URL", "REDIS_URL", "QUEUE_URL", "CONTRACTS_DIR"} {
 		env := validEnv()
 		delete(env, name)
 		if _, err := load(env); err == nil || !strings.Contains(err.Error(), name) {
@@ -32,7 +35,7 @@ func TestLoadConfig_RequiredVariables(t *testing.T) {
 
 func TestLoadConfig_InvalidValues(t *testing.T) {
 	cases := map[string]string{
-		"PORT": "abc", "LOG_LEVEL": "verbose", "GATEWAY_ROUTES": "auth", "GATEWAY_MAX_BODY_BYTES": "0",
+		"PORT": "abc", "LOG_LEVEL": "verbose", "GATEWAY_ROUTES": "auth", "GATEWAY_MAX_BODY_BYTES": "0", "REDIS_URL": "not a url", "REDIS_TIMEOUT_MS": "0",
 	}
 	for name, value := range cases {
 		env := validEnv()
@@ -54,5 +57,43 @@ func TestLoadConfig_DefaultsFromRFC0002(t *testing.T) {
 	if cfg.JWTIssuer != "ticketpro-auth" || cfg.JWTAudience != "ticketpro-api" || cfg.JWKSCacheTTL != 5*time.Minute ||
 		cfg.ClockSkew != 30*time.Second || cfg.MaxBodyBytes != 65536 || cfg.UpstreamTimeout != 5*time.Second {
 		t.Fatalf("defaults %+v", cfg)
+	}
+}
+
+func TestLoadConfig_RedisDefaults(t *testing.T) {
+	cfg, err := load(validEnv())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.RedisURL != "redis://gateway-redis:6379/0" || cfg.RedisTimeout != 200*time.Millisecond {
+		t.Fatalf("redis %q %v", cfg.RedisURL, cfg.RedisTimeout)
+	}
+}
+
+func TestLoadConfig_RateLimitDefaults(t *testing.T) {
+	cfg, err := load(validEnv())
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := cfg.Limits
+	if l.Default.RPS != 10 || l.Default.Burst != 20 || l.Public.RPS != 5 || l.Public.Burst != 10 ||
+		l.Login.RPS != 1 || l.Login.Burst != 5 || l.Orders.RPS != 2 || l.Orders.Burst != 5 {
+		t.Fatalf("limits %+v", l)
+	}
+}
+
+func TestLoadConfig_RateLimitValues(t *testing.T) {
+	env := validEnv()
+	env["AUTH_LOGIN_RPS"] = "0.5"
+	cfg, err := load(env)
+	if err != nil || cfg.Limits.Login.RPS != 0.5 {
+		t.Fatalf("login rps %v err %v", cfg.Limits.Login.RPS, err)
+	}
+	for _, name := range []string{"RATE_LIMIT_RPS", "AUTH_LOGIN_RPS", "ORDERS_BURST"} {
+		env := validEnv()
+		env[name] = "0"
+		if _, err := load(env); err == nil || !strings.Contains(err.Error(), name) {
+			t.Errorf("%s=0: want error naming it, got %v", name, err)
+		}
 	}
 }

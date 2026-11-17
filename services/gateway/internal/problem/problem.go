@@ -14,6 +14,7 @@ var titles = map[string]string{
 	"UPSTREAM_TIMEOUT":  "Serviço não respondeu a tempo",
 	"BAD_GATEWAY":       "Serviço indisponível",
 	"INTERNAL_ERROR":    "Erro interno",
+	"RATE_LIMITED":      "Muitas requisições, tente mais tarde",
 }
 
 // Write sends a problem body with the given status and code.
