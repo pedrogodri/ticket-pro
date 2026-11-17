@@ -73,3 +73,26 @@ func TestRedisDownReturnsError(t *testing.T) {
 		t.Fatal("want error")
 	}
 }
+
+// Replicas with skewed clocks share a bucket: a lagging clock must not rewind ts and refill it again.
+func TestSkewedReplicaClockDoesNotRefill(t *testing.T) {
+	now := time.Unix(1_800_000_000, 0)
+	l, _ := newLimiter(t, &now)
+	rule := Rule{RPS: 2, Burst: 1}
+	ctx := context.Background()
+	ahead, behind := now.Add(2*time.Second), now
+	allowed := 0
+	for i := range 6 {
+		if i%2 == 0 {
+			now = ahead
+		} else {
+			now = behind
+		}
+		if d, _ := l.Allow(ctx, "orders:u", rule); d.Allowed {
+			allowed++
+		}
+	}
+	if allowed != 1 {
+		t.Fatalf("allowed %d requests across skewed replicas, want 1", allowed)
+	}
+}

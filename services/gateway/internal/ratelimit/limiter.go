@@ -38,6 +38,7 @@ local ttl = tonumber(ARGV[4])
 local state = redis.call('HMGET', KEYS[1], 'tokens', 'ts')
 local tokens = tonumber(state[1]) or burst
 local ts = tonumber(state[2]) or now
+now = math.max(now, ts) -- a lagging replica clock must not rewind ts (refill twice)
 tokens = math.min(burst, tokens + math.max(0, now - ts) * rate / 1000)
 local allowed = 0
 local retry = 0
