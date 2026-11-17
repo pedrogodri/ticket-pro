@@ -16,21 +16,35 @@ const body = {
 let db: TestDatabase;
 let app: FastifyInstance;
 let validator: ContractValidator;
+let appV2: FastifyInstance;
 
 beforeAll(async () => {
   db = await startDatabase();
   validator = await createValidator("contracts");
   app = Fastify();
-  registerOrderRoutes(app, { pool: db.appPool, topicArn: TOPIC, maxQuantity: 6 });
+  registerOrderRoutes(app, {
+    pool: db.appPool,
+    topicArn: TOPIC,
+    maxQuantity: 6,
+    orderCreatedVersion: 1,
+  });
+  appV2 = Fastify();
+  registerOrderRoutes(appV2, {
+    pool: db.appPool,
+    topicArn: TOPIC,
+    maxQuantity: 6,
+    orderCreatedVersion: 2,
+  });
 }, 120_000);
 
 afterAll(async () => {
   await app.close();
+  await appV2.close();
   await db.stop();
 });
 
-const create = (user: string, key: string) =>
-  app.inject({
+const create = (user: string, key: string, server: FastifyInstance = app) =>
+  server.inject({
     method: "POST",
     url: "/orders",
     headers: {
@@ -73,7 +87,40 @@ describe("orders API against Postgres (orders_app role, RLS)", () => {
         payload: row.payload,
       }),
     );
+    expect(row.version).toBe(1);
     expect(row.payload).toEqual({ orderId, userId: A, ...body });
+  });
+
+  // RFC 0001 §5.5: ORDER_CREATED_VERSION=2 publishes v2 with channel API, valid against its contract.
+  it("publishes OrderCreated v2 with channel API when configured", async () => {
+    const res = await create(A, crypto.randomUUID(), appV2);
+    expect(res.statusCode).toBe(202);
+    const { orderId } = res.json<{ orderId: string }>();
+    const out = await db.ownerPool.query<{
+      message_id: string;
+      correlation_id: string;
+      type: string;
+      version: number;
+      occurred_at: Date;
+      payload: Record<string, unknown>;
+    }>(
+      "SELECT message_id, correlation_id, type, version, occurred_at, payload FROM outbox WHERE payload->>'orderId' = $1",
+      [orderId],
+    );
+    const row = out.rows[0];
+    if (!row) throw new Error("OrderCreated not in outbox");
+    expect(row.version).toBe(2);
+    expect(row.payload).toEqual({ orderId, userId: A, ...body, channel: "API" });
+    validator.validate(
+      JSON.stringify({
+        messageId: row.message_id,
+        correlationId: row.correlation_id,
+        type: row.type,
+        version: row.version,
+        occurredAt: row.occurred_at.toISOString(),
+        payload: row.payload,
+      }),
+    );
   });
 
   // Review Focus 3: a client retry with the same key never creates a second order.

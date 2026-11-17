@@ -4,6 +4,9 @@ import type { RelayOptions } from "../platform/relay.js";
 
 export type { LogLevel };
 
+/** OrderCreated versions the order can publish. */
+export type OrderCreatedVersion = 1 | 2;
+
 export interface Config {
   serviceName: string;
   port: number;
@@ -26,6 +29,8 @@ export interface Config {
   consumer: { concurrency: number; waitTimeSeconds: number };
   /** ORDER_PAYMENT_TIMEOUT_MS: deadline from AWAITING_PAYMENT (RFC 0003 §5.1). */
   paymentTimeoutMs: number;
+  /** ORDER_CREATED_VERSION: OrderCreated version to publish, 1 or 2 (RFC 0001 §5.5). */
+  orderCreatedVersion: OrderCreatedVersion;
 }
 
 const required = (name: string) => z.string().trim().min(1, `${name} is required`);
@@ -60,6 +65,10 @@ const envSchema = z.object({
   CONSUMER_CONCURRENCY: positiveInt("CONSUMER_CONCURRENCY", 4),
   SQS_WAIT_TIME_S: positiveInt("SQS_WAIT_TIME_S", 10),
   ORDER_PAYMENT_TIMEOUT_MS: positiveInt("ORDER_PAYMENT_TIMEOUT_MS", 15_000),
+  ORDER_CREATED_VERSION: z
+    .enum(["1", "2"], { error: "ORDER_CREATED_VERSION must be 1 or 2" })
+    .default("2")
+    .transform((v): OrderCreatedVersion => (v === "1" ? 1 : 2)),
   AWS_ENDPOINT_URL: z.string().trim().optional(),
   OUTBOX_BATCH_SIZE: positiveInt("OUTBOX_BATCH_SIZE", 50),
   OUTBOX_POLL_INTERVAL_MS: positiveInt("OUTBOX_POLL_INTERVAL_MS", 200),
@@ -123,5 +132,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     contractsDir: e.CONTRACTS_DIR,
     consumer: { concurrency: e.CONSUMER_CONCURRENCY, waitTimeSeconds: e.SQS_WAIT_TIME_S },
     paymentTimeoutMs: e.ORDER_PAYMENT_TIMEOUT_MS,
+    orderCreatedVersion: e.ORDER_CREATED_VERSION,
   };
 }

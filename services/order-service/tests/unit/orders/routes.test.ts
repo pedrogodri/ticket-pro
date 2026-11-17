@@ -5,7 +5,12 @@ import { registerOrderRoutes } from "../../../src/modules/orders/http/routes.js"
 
 // Validation happens before any database access: the pool is never touched in these cases.
 const app = Fastify();
-registerOrderRoutes(app, { pool: {} as pg.Pool, topicArn: "arn:t", maxQuantity: 6 });
+registerOrderRoutes(app, {
+  pool: {} as pg.Pool,
+  topicArn: "arn:t",
+  maxQuantity: 6,
+  orderCreatedVersion: 2,
+});
 
 const user = { "x-user-id": "0193a6f0-1111-7000-8000-000000000001" };
 const key = { "idempotency-key": "0193a6f0-7777-7000-8000-000000000007" };
