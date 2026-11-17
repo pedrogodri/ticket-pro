@@ -82,7 +82,7 @@ func main() {
 	}
 	consumer := revocation.NewConsumer(revocation.ConsumerConfig{
 		Queue: sqs.NewFromConfig(awsCfg), QueueURL: cfg.QueueURL, Store: revocations,
-		Validator: validator, WaitTimeS: cfg.SQSWaitTimeS, Logger: logger,
+		Validator: validator, WaitTimeS: cfg.SQSWaitTimeS, RequestTimeout: cfg.HTTPClientTimeout, Logger: logger,
 	})
 	go func() {
 		if err := consumer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {

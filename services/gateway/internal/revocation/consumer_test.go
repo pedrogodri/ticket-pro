@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"testing"
@@ -20,13 +21,20 @@ import (
 )
 
 type fakeQueue struct {
-	mu         sync.Mutex
-	deleted    int
-	visibility []int32
+	mu          sync.Mutex
+	receiveOpts sqs.Options
+	deleted     int
+	visibility  []int32
 }
 
-func (q *fakeQueue) ReceiveMessage(context.Context, *sqs.ReceiveMessageInput, ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error) {
-	return &sqs.ReceiveMessageOutput{}, nil
+func (q *fakeQueue) ReceiveMessage(ctx context.Context, _ *sqs.ReceiveMessageInput, optFns ...func(*sqs.Options)) (*sqs.ReceiveMessageOutput, error) {
+	q.mu.Lock()
+	for _, fn := range optFns {
+		fn(&q.receiveOpts)
+	}
+	q.mu.Unlock()
+	<-ctx.Done()
+	return nil, ctx.Err()
 }
 
 func (q *fakeQueue) DeleteMessage(context.Context, *sqs.DeleteMessageInput, ...func(*sqs.Options)) (*sqs.DeleteMessageOutput, error) {
@@ -138,5 +146,18 @@ func TestRedisDownIsRetried(t *testing.T) {
 	}
 	if q.deleted != 0 || len(q.visibility) != 1 || q.visibility[0] < 1 || !strings.Contains(logs.String(), "message_retry") {
 		t.Fatalf("deleted %d visibility %v logs %s", q.deleted, q.visibility, logs.String())
+	}
+}
+
+// The long poll waits WaitTimeS: the receive must not use the short AWS client timeout (RFC 0003 §5.1).
+func TestReceiveExtendsTheHTTPTimeoutForTheLongPoll(t *testing.T) {
+	c, q, _ := newConsumer(t, io.Discard)
+	c.cfg.WaitTimeS, c.cfg.RequestTimeout = 10, 3*time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_ = c.Run(ctx)
+	client, ok := q.receiveOpts.HTTPClient.(*http.Client)
+	if !ok || client.Timeout != 13*time.Second {
+		t.Fatalf("receive HTTP client %#v", q.receiveOpts.HTTPClient)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"math"
 	"math/rand/v2"
+	"net/http"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -44,8 +45,10 @@ type ConsumerConfig struct {
 	Store     Store
 	Validator *envelope.Validator
 	WaitTimeS int
-	Clock     func() time.Time
-	Logger    *slog.Logger
+	// RequestTimeout is the AWS client timeout (HTTP_CLIENT_TIMEOUT_MS); the long poll adds WaitTimeS to it.
+	RequestTimeout time.Duration
+	Clock          func() time.Time
+	Logger         *slog.Logger
 }
 
 // Consumer applies TokenRevoked to the blacklist. The gateway has no database, so there is no
@@ -80,7 +83,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			MaxNumberOfMessages:         10,
 			WaitTimeSeconds:             int32(c.cfg.WaitTimeS),
 			MessageSystemAttributeNames: []sqstypes.MessageSystemAttributeName{sqstypes.MessageSystemAttributeNameApproximateReceiveCount},
-		})
+		}, c.longPoll)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -156,6 +159,11 @@ func (c *Consumer) Process(ctx context.Context, msg sqstypes.Message) Outcome {
 	}
 	log.InfoContext(ctx, "message_consumed", "reason", p.Reason)
 	return Succeeded
+}
+
+// longPoll gives the receive its own HTTP timeout: the default client one is shorter than WaitTimeS.
+func (c *Consumer) longPoll(o *sqs.Options) {
+	o.HTTPClient = &http.Client{Timeout: time.Duration(c.cfg.WaitTimeS)*time.Second + c.cfg.RequestTimeout}
 }
 
 func (c *Consumer) changeVisibility(ctx context.Context, log *slog.Logger, msg sqstypes.Message, seconds int32) {
