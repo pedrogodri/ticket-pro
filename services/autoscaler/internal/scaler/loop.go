@@ -60,7 +60,7 @@ func (l *Loop) RunOnce(ctx context.Context) {
 	}
 	for _, t := range l.Targets {
 		if err := l.check(ctx, t); err != nil && ctx.Err() == nil {
-			l.Logger.WarnContext(ctx, "scale_check_failed", "service", t.Service, "error", err.Error())
+			l.Logger.WarnContext(ctx, "scale_check_failed", "target", t.Service, "error", err.Error())
 		}
 	}
 }
@@ -84,7 +84,7 @@ func (l *Loop) check(ctx context.Context, t Target) error {
 	}
 	current := len(replicas)
 	desired := state.Decide(l.Policy, depth, current, l.Clock())
-	l.Logger.InfoContext(ctx, "scale_decision", "service", t.Service, "depth", depth, "current", current, "desired", desired)
+	l.Logger.InfoContext(ctx, "scale_decision", "target", t.Service, "depth", depth, "current", current, "desired", desired)
 
 	next := replicas[len(replicas)-1].Number + 1
 	for i := current; i < desired; i++ {
