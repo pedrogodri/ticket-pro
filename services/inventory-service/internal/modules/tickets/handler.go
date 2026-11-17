@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"time"
 
@@ -39,6 +40,7 @@ func NewCode() (string, error) {
 // OrderConfirmedHandler confirms the reservation, issues tickets and publishes TicketsIssued.
 type OrderConfirmedHandler struct {
 	TopicARN string
+	Logger   *slog.Logger // nil: no log for the invariant violation
 }
 
 // Versions supported.
@@ -62,6 +64,7 @@ func (h OrderConfirmedHandler) Handle(ctx context.Context, tx pgx.Tx, env envelo
 		RETURNING r.id::text, r.quantity, s.id::text, s.name, e.id::text, e.name, e.starts_at`, in.OrderID).
 		Scan(&reservationID, &quantity, &sectorID, &sectorName, &eventID, &eventName, &startsAt)
 	if err == pgx.ErrNoRows {
+		h.reportReleased(ctx, tx, in.OrderID)
 		return messaging.ErrStale
 	}
 	if err != nil {
@@ -89,4 +92,18 @@ func (h OrderConfirmedHandler) Handle(ctx context.Context, tx pgx.Tx, env envelo
 		return err
 	}
 	return outbox.Enqueue(ctx, tx, h.TopicARN, out)
+}
+
+// reportReleased logs an ERROR when the order was confirmed but its reservation is already RELEASED.
+// RESERVATION_TTL_MS >= ORDER_PAYMENT_TIMEOUT_MS + margin (RFC 0003 decision 4) should make this
+// impossible; if it happens, the customer paid and got no tickets, so it must not hide as a stale event.
+func (h OrderConfirmedHandler) reportReleased(ctx context.Context, tx pgx.Tx, orderID string) {
+	if h.Logger == nil {
+		return
+	}
+	var status string
+	if err := tx.QueryRow(ctx, `SELECT status FROM reservations WHERE order_id = $1`, orderID).Scan(&status); err != nil || status != "RELEASED" {
+		return
+	}
+	h.Logger.ErrorContext(ctx, "order_confirmed_after_release", "orderId", orderID)
 }

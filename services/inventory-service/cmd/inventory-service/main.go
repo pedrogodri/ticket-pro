@@ -97,7 +97,7 @@ func run(ctx context.Context, cfg app.Config, logger *slog.Logger) error {
 		RequestTimeout: cfg.HTTPClientTimeout, Logger: logger,
 		Handlers: map[string]messaging.Handler{
 			"OrderCreated":   reservations.OrderCreatedHandler{TopicARN: cfg.TopicARN, TTL: cfg.ReservationTTL},
-			"OrderConfirmed": tickets.OrderConfirmedHandler{TopicARN: cfg.TopicARN},
+			"OrderConfirmed": tickets.OrderConfirmedHandler{TopicARN: cfg.TopicARN, Logger: logger},
 			"OrderCancelled": reservations.OrderCancelledHandler{},
 		},
 	})
@@ -106,6 +106,16 @@ func run(ctx context.Context, cfg app.Config, logger *slog.Logger) error {
 		defer wg.Done()
 		if err := consumer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Error("consumer_stopped", "error", err.Error())
+		}
+	}()
+
+	expirer := reservations.Expirer{Pool: workerPool, TopicARN: cfg.TopicARN,
+		Interval: cfg.Expiry.Interval, BatchSize: cfg.Expiry.BatchSize, BatchPause: cfg.Expiry.BatchPause, Logger: logger}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := expirer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Error("expirer_stopped", "error", err.Error())
 		}
 	}()
 

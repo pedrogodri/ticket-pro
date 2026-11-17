@@ -65,6 +65,7 @@ func TestLoadConfig_DefaultsFromRFC0003(t *testing.T) {
 		ContractsDir:      "/contracts",
 		Consumer:          ConsumerConfig{Concurrency: 4, WaitTimeS: 10},
 		ReservationTTL:    time.Minute,
+		Expiry:            ExpiryConfig{Interval: time.Second, BatchSize: 50, BatchPause: 50 * time.Millisecond},
 	}
 	if cfg != want {
 		t.Fatalf("got %+v\nwant %+v", cfg, want)
@@ -82,5 +83,20 @@ func TestLoadConfig_Overrides(t *testing.T) {
 	}
 	if cfg.Outbox.BatchSize != 10 || cfg.Outbox.MaxBackoff != time.Second || cfg.HTTPClientTimeout != 500*time.Millisecond {
 		t.Fatalf("overrides not applied: %+v", cfg)
+	}
+}
+
+// RFC 0003 decision 4 (LOCKED): the reservation must outlive the payment deadline plus a margin.
+func TestLoadConfig_ReservationTTLMustCoverDeadlineAndMargin(t *testing.T) {
+	env := validEnv()
+	env["RESERVATION_TTL_MS"] = "40000" // < 15000 + 30000
+	_, err := load(t, env)
+	if err == nil || !strings.Contains(err.Error(), "RESERVATION_TTL_MS") ||
+		!strings.Contains(err.Error(), "ORDER_PAYMENT_TIMEOUT_MS") || !strings.Contains(err.Error(), "RESERVATION_SAFETY_MARGIN_MS") {
+		t.Fatalf("want error naming the three variables, got %v", err)
+	}
+	env["RESERVATION_TTL_MS"] = "45000"
+	if _, err := load(t, env); err != nil {
+		t.Fatalf("TTL equal to deadline + margin must pass: %v", err)
 	}
 }

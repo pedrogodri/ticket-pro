@@ -23,6 +23,7 @@ type Config struct {
 	ContractsDir      string // vendored contracts (message validation)
 	Consumer          ConsumerConfig
 	ReservationTTL    time.Duration // RESERVATION_TTL_MS
+	Expiry            ExpiryConfig
 }
 
 // ConsumerConfig tunes the SQS consumer (RFC 0003 §5.1).
@@ -63,11 +64,30 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 			WaitTimeS:   r.positiveInt("SQS_WAIT_TIME_S", 10),
 		},
 		ReservationTTL: r.millis("RESERVATION_TTL_MS", 60000),
+		Expiry: ExpiryConfig{
+			Interval:   r.millis("RESERVATION_EXPIRY_SCAN_INTERVAL_MS", 1000),
+			BatchSize:  r.positiveInt("RESERVATION_EXPIRY_BATCH_SIZE", 50),
+			BatchPause: r.millis("RESERVATION_EXPIRY_BATCH_PAUSE_MS", 50),
+		},
+	}
+	// RFC 0003 decision 4 (LOCKED): an OrderConfirmed must always find the reservation PENDING.
+	paymentTimeout := r.millis("ORDER_PAYMENT_TIMEOUT_MS", 15000)
+	margin := r.millis("RESERVATION_SAFETY_MARGIN_MS", 30000)
+	if r.err == nil && cfg.ReservationTTL < paymentTimeout+margin {
+		r.fail("RESERVATION_TTL_MS (%d) must be >= ORDER_PAYMENT_TIMEOUT_MS (%d) + RESERVATION_SAFETY_MARGIN_MS (%d)",
+			cfg.ReservationTTL.Milliseconds(), paymentTimeout.Milliseconds(), margin.Milliseconds())
 	}
 	if r.err != nil {
 		return Config{}, r.err
 	}
 	return cfg, nil
+}
+
+// ExpiryConfig drives the reservation expiration job (arquitetura §6 step 9).
+type ExpiryConfig struct {
+	Interval   time.Duration // RESERVATION_EXPIRY_SCAN_INTERVAL_MS
+	BatchSize  int           // RESERVATION_EXPIRY_BATCH_SIZE
+	BatchPause time.Duration // RESERVATION_EXPIRY_BATCH_PAUSE_MS
 }
 
 // reader keeps the first validation error so LoadConfig reads like a declaration.
