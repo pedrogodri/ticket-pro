@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ticketpro/gateway/internal/platform/tracing"
 	"net/http"
 	"os"
 	"os/signal"
@@ -35,6 +36,23 @@ func main() {
 	}
 
 	logger := app.NewLogger(os.Stdout, cfg)
+
+	serviceName := os.Getenv("OTEL_SERVICE_NAME")
+	if serviceName == "" {
+		serviceName = cfg.ServiceName
+	}
+	shutdownTracing, err := tracing.Setup(context.Background(), tracing.Config{
+		ServiceName: serviceName, Endpoint: os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+	})
+	if err != nil {
+		logger.Error("tracing_setup_failed", "error", err.Error())
+		os.Exit(1)
+	}
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdownTracing(flushCtx)
+	}()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

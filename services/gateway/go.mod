@@ -5,7 +5,10 @@ go 1.25.0
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0
 )
+
+require github.com/felixge/httpsnoop v1.1.0 // indirect
 
 require (
 	github.com/alicebob/miniredis/v2 v2.39.0

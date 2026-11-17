@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/ticketpro/gateway/internal/jwtauth"
 	"github.com/ticketpro/gateway/internal/problem"
@@ -64,8 +65,10 @@ func New(cfg Config) http.Handler {
 	proxies := make(map[string]*httputil.ReverseProxy, len(cfg.Routes))
 	for name, target := range cfg.Routes {
 		rp := httputil.NewSingleHostReverseProxy(target)
-		rp.Transport = &http.Transport{ResponseHeaderTimeout: cfg.UpstreamTimeout, Proxy: nil,
-			DialContext: (&net.Dialer{Timeout: cfg.UpstreamTimeout}).DialContext}
+		// otelhttp opens a client span per upstream call and injects its traceparent (ADR-0012), replacing
+		// any traceparent the client sent.
+		rp.Transport = otelhttp.NewTransport(&http.Transport{ResponseHeaderTimeout: cfg.UpstreamTimeout, Proxy: nil,
+			DialContext: (&net.Dialer{Timeout: cfg.UpstreamTimeout}).DialContext})
 		rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 			correlationID, _ := r.Context().Value(ctxKey{}).(string)
 			var netErr net.Error

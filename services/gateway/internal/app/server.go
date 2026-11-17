@@ -1,9 +1,12 @@
 package app
 
 import (
+	"strings"
+
 	"context"
 	"errors"
 	"fmt"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"log/slog"
 	"net/http"
 	"time"
@@ -20,7 +23,7 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger, health, edge http
 	mux.Handle("/", edge)
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Port),
-		Handler:           mux,
+		Handler:           traced(mux, cfg.ServiceName),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -43,4 +46,11 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger, health, edge http
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// traced opens a server span per request (ADR-0012); the health probes are left out to keep traces readable.
+func traced(h http.Handler, service string) http.Handler {
+	return otelhttp.NewHandler(h, service, otelhttp.WithFilter(func(r *http.Request) bool {
+		return !strings.HasPrefix(r.URL.Path, "/health/")
+	}))
 }
