@@ -4,7 +4,13 @@ Ponto de entrada único do Ticket Pro, em Go. É o único serviço que publica p
 
 **Dono:** Pedro.
 
-**Estado:** F2: roteamento por prefixo (`GATEWAY_ROUTES`), validação do JWT RS256 pelo JWKS do auth, troca dos headers de identidade, limite de corpo (413) e timeout de upstream (504). Rate limit e revogação (Redis) chegam na F3.
+**Estado:** completo segundo a RFC 0002:
+- roteamento por prefixo (`GATEWAY_ROUTES`);
+- validação do JWT RS256 pelo JWKS do auth;
+- troca dos headers de identidade;
+- limite de corpo (413) e timeout de upstream (504);
+- blacklist de `jti` no Redis próprio, alimentada por `TokenRevoked` (401);
+- rate limit por IP/usuário (429 + `Retry-After`).
 
 ## Responsabilidades
 
@@ -21,8 +27,19 @@ Ponto de entrada único do Ticket Pro, em Go. É o único serviço que publica p
 | Endpoint | Fase | Resposta |
 |---|---|---|
 | `GET /health/live` | F0 ✅ | `200 {"status":"up"}` |
-| `GET /health/ready` | F0 ✅ | `200 {"status":"up","checks":{}}` |
-| `/auth/*`, `/me*`, `/orders*`, `/events*` | F2 | proxy para o serviço dono |
+| `GET /health/ready` | ✅ | `200 {"status":"up","checks":{"redis":"up","broker":"up"}}`; Redis ou broker fora → `degraded`, ainda 200 (fail-open, ADR-0014) |
+| `/auth/*`, `/me*`, `/orders*`, `/events*` | ✅ | proxy para o serviço dono |
+
+### Rate limit
+
+| Rota | Chave | Variáveis (padrão) |
+|---|---|---|
+| `POST /auth/login` | IP | `AUTH_LOGIN_RPS`=1, `AUTH_LOGIN_BURST`=5 |
+| demais rotas públicas | IP | `RATE_LIMIT_PUBLIC_RPS`=5, `RATE_LIMIT_PUBLIC_BURST`=10 |
+| `POST /orders` | usuário | `ORDERS_RPS`=2, `ORDERS_BURST`=5 |
+| demais rotas autenticadas | usuário | `RATE_LIMIT_RPS`=10, `RATE_LIMIT_BURST`=20 |
+
+O IP é o do peer TCP. `X-Forwarded-For` é ignorado, porque o gateway é a borda e esse header viria do próprio cliente.
 
 ## Eventos
 
@@ -32,7 +49,11 @@ Ponto de entrada único do Ticket Pro, em Go. É o único serviço que publica p
 
 ## Dados
 
-Não tem Postgres. Usa um Redis próprio para a blacklist de `jti` e para o rate limit (F2/F3).
+Não tem Postgres. Usa o Redis próprio `gateway-redis` (rede interna `ticketpro-gateway-data`, sem persistência) para:
+- a blacklist de `jti`: `revoked:{jti}`, com TTL até o `expiresAt` do token;
+- os buckets do rate limit: `ratelimit:{chave}`.
+
+Como `SET` com o mesmo TTL é idempotente, o consumidor não precisa de tabela de mensagens processadas. Se o Redis cair, a revogação e o rate limit são fail-open, com log `revocation_check_unavailable` / `rate_limit_unavailable`.
 
 ## Por onde começar
 
@@ -40,8 +61,7 @@ Não tem Postgres. Usa um Redis próprio para a blacklist de `jti` e para o rate
 2. Ler:
    - [RFC 0002](../../docs/rfc/0002-authentication-and-authorization.md) §5.5 (validação no gateway) e §5.8 (OWASP);
    - [padrões](../../docs/padroes.md) §4 (HTTP e formato de erro).
-3. **F1:** nada específico. O gateway já está `healthy`, e a lib `shared/go` (Tasks 3–4 do [plano F1](../../docs/superpowers/plans/2026-11-12-f1-platform.md)) entra quando o consumidor de `TokenRevoked` chegar.
-4. **F2:** roteamento, JWT via JWKS e headers. **F3:** rate limit e `TokenRevoked` → Redis ([roadmap](../../docs/roadmap.md)).
+3. Plano: [gateway completo](../../docs/superpowers/plans/2026-11-15-gateway-complete.md). Checagem ao vivo: `scripts/gateway-check.sh`.
 
 ## Variáveis de ambiente
 
@@ -50,6 +70,17 @@ Não tem Postgres. Usa um Redis próprio para a blacklist de `jti` e para o rate
 | `SERVICE_NAME` | sim | `gateway` |
 | `PORT` | sim | `8080` |
 | `LOG_LEVEL` | sim | `debug` \| `info` \| `warn` \| `error` |
+| `GATEWAY_ROUTES` | sim | `auth=http://auth-service:8080,me=...` |
+| `JWKS_URL` | sim | `http://auth-service:8080/.well-known/jwks.json` |
+| `JWT_ISSUER`, `JWT_AUDIENCE`, `JWKS_CACHE_TTL_S`, `JWT_CLOCK_SKEW_S` | não | `ticketpro-auth`, `ticketpro-api`, 300, 30 |
+| `GATEWAY_MAX_BODY_BYTES`, `GATEWAY_UPSTREAM_TIMEOUT_MS` | não | 65536, 5000 |
+| `REDIS_URL` | sim | `redis://gateway-redis:6379/0` |
+| `REDIS_TIMEOUT_MS` | não | 200 (passou disso, fail-open) |
+| `QUEUE_URL`, `CONTRACTS_DIR` | sim | fila `ticketpro-gateway`, `/contracts` |
+| `SQS_WAIT_TIME_S`, `HTTP_CLIENT_TIMEOUT_MS` | não | 10, 3000 |
+| `RATE_LIMIT_*`, `AUTH_LOGIN_*`, `ORDERS_*` | não | ver *Rate limit* |
+
+`internal/platform/` e `contracts/` são cópias geradas por `scripts/sync-shared.sh`: não edite.
 
 ## Comandos
 
