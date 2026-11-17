@@ -65,7 +65,7 @@ func TestLoadConfig_DefaultsFromRFC0003(t *testing.T) {
 		ContractsDir:      "/contracts",
 		Consumer:          ConsumerConfig{Concurrency: 4, WaitTimeS: 10},
 		ReservationTTL:    time.Minute,
-		Expiry:            ExpiryConfig{Interval: time.Second, BatchSize: 50},
+		Expiry:            ExpiryConfig{Interval: time.Second, BatchSize: 50, BatchPause: 50 * time.Millisecond},
 	}
 	if cfg != want {
 		t.Fatalf("got %+v\nwant %+v", cfg, want)

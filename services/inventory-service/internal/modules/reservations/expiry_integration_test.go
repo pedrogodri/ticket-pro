@@ -4,6 +4,8 @@ package reservations_test
 
 import (
 	"context"
+	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ticketpro/inventory-service/internal/modules/reservations"
+	"github.com/ticketpro/inventory-service/internal/modules/tickets"
 	"github.com/ticketpro/inventory-service/internal/platform/messaging"
 )
 
@@ -223,5 +226,89 @@ func TestExpirer_RunSurvivesFailingScans(t *testing.T) {
 	e := reservations.Expirer{Pool: broken, TopicARN: topic, Interval: 20 * time.Millisecond, BatchSize: 10}
 	if err := e.Run(ctx); err != context.DeadlineExceeded {
 		t.Fatalf("Run returned %v before ctx ended", err)
+	}
+}
+
+// A confirmation that finds the reservation already released breaks RFC 0003 decision 4: it must be
+// visible as an ERROR, not only as a stale event.
+func TestOrderConfirmed_AfterReleaseLogsInvariantViolation(t *testing.T) {
+	pool := setup(t)
+	sector := newSector(t, pool, 5)
+	order := reserve(t, pool, sector, 2, -time.Second)
+	expireAll(t, expirer(pool, 50))
+	var logs strings.Builder
+	h := tickets.OrderConfirmedHandler{TopicARN: topic, Logger: slog.New(slog.NewJSONHandler(&logs, nil))}
+	if err := handle(t, pool, h, "OrderConfirmed", confirmation(order, sector, 2)); err != messaging.ErrStale {
+		t.Fatalf("want ErrStale, got %v", err)
+	}
+	if !strings.Contains(logs.String(), `"level":"ERROR"`) || !strings.Contains(logs.String(), "order_confirmed_after_release") ||
+		!strings.Contains(logs.String(), order) {
+		t.Fatalf("logs %s", logs.String())
+	}
+}
+
+// Cancellation and expiry racing for the same reservations return the stock exactly once.
+func TestOrderCancelledRacingExpiryReturnsStockOnce(t *testing.T) {
+	pool := setup(t)
+	expireAll(t, expirer(pool, 50))
+	_, cancelled, _ := handlers()
+	sector := newSector(t, pool, 40)
+	orders := make([]string, 20)
+	for i := range orders {
+		orders[i] = reserve(t, pool, sector, 2, -time.Second)
+	}
+	var wg sync.WaitGroup
+	for _, o := range orders {
+		wg.Add(1)
+		go func(o string) {
+			defer wg.Done()
+			cancel := map[string]any{"orderId": o, "userId": userID, "reason": "PAYMENT_FAILED", "cancelledAt": "2026-11-20T18:30:20.000Z"}
+			if err := handle(t, pool, cancelled, "OrderCancelled", cancel); err != nil && err != messaging.ErrStale {
+				t.Errorf("cancel %s: %v", o, err)
+			}
+		}(o)
+	}
+	for range 3 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				n, err := expirer(pool, 4).RunOnce(context.Background())
+				if err != nil {
+					t.Errorf("expire: %v", err)
+					return
+				}
+				if n == 0 {
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	if n := available(t, pool, sector); n != 40 {
+		t.Fatalf("available %d, want 40 (stock returned once per reservation)", n)
+	}
+}
+
+// A backlog of full batches pauses BatchPause between them and still drains; cancellation stops the drain.
+func TestExpirer_RunPausesBetweenFullBatches(t *testing.T) {
+	pool := setup(t)
+	expireAll(t, expirer(pool, 50))
+	sector := newSector(t, pool, 10)
+	for range 6 {
+		reserve(t, pool, sector, 1, -time.Second)
+	}
+	e := reservations.Expirer{Pool: pool, TopicARN: topic, Interval: 10 * time.Millisecond, BatchSize: 2, BatchPause: 150 * time.Millisecond}
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	_ = e.Run(ctx)
+	if n := available(t, pool, sector); n == 10 {
+		t.Fatal("drained 3 full batches in 200ms: no pause between batches")
+	}
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel2()
+	_ = e.Run(ctx2)
+	if n := available(t, pool, sector); n != 10 {
+		t.Fatalf("available %d, want 10 after draining", n)
 	}
 }

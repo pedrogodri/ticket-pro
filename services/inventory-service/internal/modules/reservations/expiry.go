@@ -19,7 +19,10 @@ type Expirer struct {
 	TopicARN  string
 	Interval  time.Duration // RESERVATION_EXPIRY_SCAN_INTERVAL_MS
 	BatchSize int           // RESERVATION_EXPIRY_BATCH_SIZE
-	Logger    *slog.Logger
+	// BatchPause separates full batches (RESERVATION_EXPIRY_BATCH_PAUSE_MS), so a large backlog does not
+	// hold a worker connection back to back.
+	BatchPause time.Duration
+	Logger     *slog.Logger
 }
 
 // Run scans every Interval until ctx is cancelled. A failed scan is logged and retried on the next tick.
@@ -49,6 +52,11 @@ func (e Expirer) Run(ctx context.Context) error {
 			}
 			if n < e.BatchSize {
 				break
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(e.BatchPause):
 			}
 		}
 	}

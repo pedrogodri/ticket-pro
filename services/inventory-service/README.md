@@ -86,3 +86,6 @@ Sem Go instalado, os alvos rodam sozinhos no container `golang:1.25`. Para forç
 | `RESERVATION_SAFETY_MARGIN_MS` | 30000 | margem exigida acima do deadline |
 | `RESERVATION_EXPIRY_SCAN_INTERVAL_MS` | 1000 | intervalo do job |
 | `RESERVATION_EXPIRY_BATCH_SIZE` | 50 | reservas por transação |
+| `RESERVATION_EXPIRY_BATCH_PAUSE_MS` | 50 | pausa entre lotes cheios |
+
+Se um `OrderConfirmed` encontrar a reserva já `RELEASED`, o inventory loga `order_confirmed_after_release` em ERROR: o cliente pagou e não recebeu ingressos.

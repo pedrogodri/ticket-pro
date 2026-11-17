@@ -65,8 +65,9 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		},
 		ReservationTTL: r.millis("RESERVATION_TTL_MS", 60000),
 		Expiry: ExpiryConfig{
-			Interval:  r.millis("RESERVATION_EXPIRY_SCAN_INTERVAL_MS", 1000),
-			BatchSize: r.positiveInt("RESERVATION_EXPIRY_BATCH_SIZE", 50),
+			Interval:   r.millis("RESERVATION_EXPIRY_SCAN_INTERVAL_MS", 1000),
+			BatchSize:  r.positiveInt("RESERVATION_EXPIRY_BATCH_SIZE", 50),
+			BatchPause: r.millis("RESERVATION_EXPIRY_BATCH_PAUSE_MS", 50),
 		},
 	}
 	// RFC 0003 decision 4 (LOCKED): an OrderConfirmed must always find the reservation PENDING.
@@ -84,8 +85,9 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 
 // ExpiryConfig drives the reservation expiration job (arquitetura §6 step 9).
 type ExpiryConfig struct {
-	Interval  time.Duration // RESERVATION_EXPIRY_SCAN_INTERVAL_MS
-	BatchSize int           // RESERVATION_EXPIRY_BATCH_SIZE
+	Interval   time.Duration // RESERVATION_EXPIRY_SCAN_INTERVAL_MS
+	BatchSize  int           // RESERVATION_EXPIRY_BATCH_SIZE
+	BatchPause time.Duration // RESERVATION_EXPIRY_BATCH_PAUSE_MS
 }
 
 // reader keeps the first validation error so LoadConfig reads like a declaration.
