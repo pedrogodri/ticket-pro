@@ -48,11 +48,18 @@ func main() {
 		logger.Error("tracing_setup_failed", "error", err.Error())
 		os.Exit(1)
 	}
-	defer func() {
+	flushTracing := func() {
 		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = shutdownTracing(flushCtx)
-	}()
+	}
+	defer flushTracing()
+	// exit flushes pending spans first: os.Exit skips deferred calls, and the spans of a failure are the
+	// ones that explain it.
+	exit := func(code int) {
+		flushTracing()
+		os.Exit(code)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -64,7 +71,7 @@ func main() {
 	redisOpts, err := redis.ParseURL(cfg.RedisURL)
 	if err != nil {
 		logger.Error("invalid_config", "error", err.Error())
-		os.Exit(1)
+		exit(1)
 	}
 	redisOpts.DialTimeout, redisOpts.ReadTimeout, redisOpts.WriteTimeout = cfg.RedisTimeout, cfg.RedisTimeout, cfg.RedisTimeout
 	redisOpts.MaxRetries = -1 // a slow Redis must fail open fast, not retry inside the request
@@ -91,12 +98,12 @@ func main() {
 	awsCfg, err := messaging.NewAWSConfig(ctx, cfg.HTTPClientTimeout)
 	if err != nil {
 		logger.Error("aws_config_failed", "error", err.Error())
-		os.Exit(1)
+		exit(1)
 	}
 	validator, err := envelope.NewValidator(cfg.ContractsDir)
 	if err != nil {
 		logger.Error("contracts_load_failed", "error", err.Error())
-		os.Exit(1)
+		exit(1)
 	}
 	consumer := revocation.NewConsumer(revocation.ConsumerConfig{
 		Queue: sqs.NewFromConfig(awsCfg), QueueURL: cfg.QueueURL, Store: revocations,
@@ -111,7 +118,7 @@ func main() {
 	health := app.NewHealthHandler(redisPinger{rdb}, consumer)
 	if err := app.Run(ctx, cfg, logger, health, edge); err != nil {
 		logger.Error("server_failed", "error", err.Error())
-		os.Exit(1)
+		exit(1)
 	}
 }
 

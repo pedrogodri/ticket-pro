@@ -49,18 +49,25 @@ func main() {
 		logger.Error("tracing_setup_failed", "error", err.Error())
 		os.Exit(1)
 	}
-	defer func() {
+	flushTracing := func() {
 		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = shutdownTracing(flushCtx)
-	}()
+	}
+	defer flushTracing()
+	// exit flushes pending spans first: os.Exit skips deferred calls, and the spans of a failure are the
+	// ones that explain it.
+	exit := func(code int) {
+		flushTracing()
+		os.Exit(code)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	if err := run(ctx, cfg, logger); err != nil {
 		logger.Error("service_failed", "error", err.Error())
-		os.Exit(1)
+		exit(1)
 	}
 }
 
