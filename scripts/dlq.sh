@@ -26,10 +26,13 @@ case "${1:-}" in
     # Only the messages present now: one that fails again comes back to the DLQ and must not loop forever.
     total=$(awsl sqs get-queue-attributes --queue-url "$dlq" --attribute-names ApproximateNumberOfMessages | jq -r '.Attributes.ApproximateNumberOfMessages')
     while [ "$moved" -lt "$total" ]; do
-      batch=$(awsl sqs receive-message --queue-url "$dlq" --max-number-of-messages 10 --visibility-timeout 30)
+      batch=$(awsl sqs receive-message --queue-url "$dlq" --max-number-of-messages 10 --visibility-timeout 30 --message-attribute-names All)
       [ "$(echo "$batch" | jq '.Messages | length // 0')" -gt 0 ] || break
       while read -r m; do
-        awsl sqs send-message --queue-url "$src" --message-body "$(echo "$m" | jq -r .Body)" >/dev/null &&
+        # Raw delivery keeps type/version/traceparent in the SQS message attributes: send them back too.
+        attrs=$(echo "$m" | jq -c '(.MessageAttributes // {}) | with_entries(.value |= {DataType, StringValue})')
+        awsl sqs send-message --queue-url "$src" --message-body "$(echo "$m" | jq -r .Body)" \
+          $( [ "$attrs" != "{}" ] && printf -- '--message-attributes %s' "$attrs" ) >/dev/null &&
           awsl sqs delete-message --queue-url "$dlq" --receipt-handle "$(echo "$m" | jq -r .ReceiptHandle)" >/dev/null &&
           moved=$((moved + 1))
       done < <(echo "$batch" | jq -c --argjson left $((total - moved)) '.Messages[:$left][]')

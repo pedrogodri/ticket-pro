@@ -8,7 +8,11 @@ cd "$(dirname "$0")/.."
 SCENARIO=f2
 N=20
 
-trap 'docker compose up -d --no-deps inventory-service >/dev/null 2>&1' EXIT
+QUEUE="http://ministack:4566/000000000000/ticketpro-inventory-service"
+VICTIM=$(docker compose ps -q inventory-service | head -1)
+trap 'docker unpause "$VICTIM" >/dev/null 2>&1; docker compose up -d --no-deps inventory-service >/dev/null 2>&1' EXIT
+# Paused, the victim keeps its open long poll: SQS hands it messages it can never process (in flight).
+docker pause "$VICTIM" >/dev/null || die "could not pause $VICTIM"
 ORDERS=()
 entries="[]"
 for i in $(seq 1 $N); do
@@ -22,8 +26,12 @@ for i in $(seq 1 $N); do
     entries="[]"
   fi
 done
-VICTIM=$(docker compose ps -q inventory-service | head -1)
+sleep 3
+in_flight=$(awsl sqs get-queue-attributes --queue-url "$QUEUE" --attribute-names ApproximateNumberOfMessagesNotVisible \
+  | jq -r '.Attributes.ApproximateNumberOfMessagesNotVisible')
 docker kill "$VICTIM" >/dev/null && info "published $N OrderCreated and killed $(docker inspect -f '{{.Name}}' "$VICTIM" | tr -d /)"
+[ "${in_flight:-0}" -ge 1 ] && pass "$in_flight message(s) were in flight on the killed replica" \
+  || fail "no message in flight when the replica was killed: the scenario proved nothing"
 
 list=$(printf "'%s'," "${ORDERS[@]}"); list=${list%,}
 done_count=0

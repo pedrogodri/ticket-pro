@@ -10,13 +10,14 @@ PAUSE_S="${1:-30}"
 
 TOKEN=$(new_user) || die "could not create a user"
 trap 'docker unpause "$(docker compose ps -q ministack)" >/dev/null 2>&1' EXIT
-docker pause "$(docker compose ps -q ministack)" >/dev/null && info "ministack paused for ${PAUSE_S}s"
+docker pause "$(docker compose ps -q ministack)" >/dev/null || die "could not pause ministack"
+info "ministack paused for ${PAUSE_S}s"
 
 ORDER=$(place_order "$TOKEN" "$EVENT" "$SECTOR" 1) || die "order not accepted while the broker was down"
 pass "POST /orders still answers 202 with the broker down"
 sleep 5
 status=$(sql orders "SELECT status FROM orders WHERE id = '$ORDER'")
-queued=$(sql orders "SELECT count(*) FROM outbox WHERE published_at IS NULL")
+queued=$(sql orders "SELECT count(*) FROM outbox WHERE published_at IS NULL AND payload->>'orderId' = '$ORDER'")
 [ "$status" = PENDING ] && pass "order stays PENDING" || fail "order is $status while the broker is down"
 [ "$queued" -ge 1 ] && pass "outbox holds $queued unpublished message(s)" || fail "outbox is empty"
 sleep $(( PAUSE_S > 5 ? PAUSE_S - 5 : 0 ))
@@ -31,5 +32,5 @@ case "$state" in
     fail "order stuck in AWAITING_PAYMENT: the relays' backoff after the outage pushed the payment past the deadline, and the order has no deadline scanner yet (PaymentRequested published: $late)" ;;
   *) fail "order still $state 90s after unpause" ;;
 esac
-[ "$(sql orders "SELECT count(*) FROM outbox WHERE published_at IS NULL")" = 0 ] && pass "outbox drained" || fail "outbox still has unpublished rows"
+[ "$(sql orders "SELECT count(*) FROM outbox WHERE published_at IS NULL AND payload->>'orderId' = '$ORDER'")" = 0 ] && pass "outbox drained" || fail "outbox still has unpublished rows"
 finish
