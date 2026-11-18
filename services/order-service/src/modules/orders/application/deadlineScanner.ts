@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises";
 import type { Pool } from "pg";
 import { v7 as uuidv7 } from "uuid";
 import { createEnvelope } from "../../../platform/envelope.js";
@@ -72,17 +73,8 @@ export function createDeadlineScanner(
       } catch (error) {
         logger.warn({ error: (error as Error).message }, "deadline_scan_failed");
       }
-      await new Promise<void>((resolve) => {
-        const t = setTimeout(resolve, options.intervalMs);
-        signal.addEventListener(
-          "abort",
-          () => {
-            clearTimeout(t);
-            resolve();
-          },
-          { once: true },
-        );
-      });
+      // timers/promises removes its abort listener when the timer fires (no listener per tick).
+      await sleep(options.intervalMs, undefined, { signal }).catch(() => undefined);
     }
   };
 

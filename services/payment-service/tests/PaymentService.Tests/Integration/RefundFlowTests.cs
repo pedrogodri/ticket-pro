@@ -34,10 +34,10 @@ public sealed class RefundFlowTests
         return (Guid)(await cmd.ExecuteScalarAsync())!;
     }
 
-    private static async Task<string> Refund(NpgsqlDataSource ds, Guid orderId, Guid paymentId)
+    private static async Task<string> Refund(NpgsqlDataSource ds, Guid orderId, Guid paymentId, long amountCents = 50000)
     {
         var env = Envelope.Create("c0a8012e-5f7d-4a8e-9b1c-2d3e4f5a6b7c", "RefundRequested", 1,
-            new { orderId = orderId.ToString(), paymentId = paymentId.ToString(), amountCents = 50000, currency = "BRL", reason = "LATE_APPROVAL" });
+            new { orderId = orderId.ToString(), paymentId = paymentId.ToString(), amountCents, currency = "BRL", reason = "LATE_APPROVAL" });
         await using var conn = await ds.OpenConnectionAsync();
         await using var tx = await conn.BeginTransactionAsync();
         try
@@ -71,6 +71,18 @@ public sealed class RefundFlowTests
 
         Assert.Equal(1, await Count(ds, "SELECT count(*) FROM refunds WHERE payment_id = $1", payment));
         Assert.Equal(1, await Count(ds, "SELECT count(*) FROM outbox WHERE type = 'PaymentRefunded' AND payload->>'paymentId' = $1", payment.ToString()));
+    }
+
+    // The refund returns what was captured, whatever amount the request carries.
+    [Fact]
+    public async Task RefundUsesTheCapturedAmountNotTheRequestedOne()
+    {
+        await using var ds = await TestDatabase.CreateAsync();
+        var order = Guid.NewGuid();
+        var payment = await ApprovedPayment(ds, order);
+        Assert.Equal("ok", await Refund(ds, order, payment, amountCents: 1));
+        Assert.Equal(50000, await Count(ds, "SELECT amount_cents FROM refunds WHERE payment_id = $1", payment));
+        Assert.Equal(50000, await Count(ds, "SELECT (payload->>'amountCents')::bigint FROM outbox WHERE type = 'PaymentRefunded' AND payload->>'paymentId' = $1", payment.ToString()));
     }
 
     [Fact]

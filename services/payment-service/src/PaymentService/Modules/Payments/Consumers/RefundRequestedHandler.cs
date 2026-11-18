@@ -17,14 +17,10 @@ public sealed class RefundRequestedHandler(string topicArn) : IMessageHandler
         ArgumentNullException.ThrowIfNull(envelope);
         var p = envelope.Payload;
         Guid orderId, paymentId;
-        long amount;
-        string currency;
         try
         {
             orderId = Guid.Parse(p.GetProperty("orderId").GetString()!);
             paymentId = Guid.Parse(p.GetProperty("paymentId").GetString()!);
-            amount = p.GetProperty("amountCents").GetInt64();
-            currency = p.GetProperty("currency").GetString()!;
         }
         catch (Exception e) when (e is KeyNotFoundException or FormatException or InvalidOperationException or ArgumentNullException)
         {
@@ -32,18 +28,25 @@ public sealed class RefundRequestedHandler(string topicArn) : IMessageHandler
         }
 
         var refundId = Guid.CreateVersion7();
+        // The refund returns what was captured: amount and currency come from the payment, not the message.
         await using var cmd = new NpgsqlCommand("""
             INSERT INTO refunds (id, payment_id, amount_cents, currency)
-            SELECT $1, id, $3, $4 FROM payments WHERE id = $2 AND status = 'APPROVED'
+            SELECT $1, id, amount_cents, currency FROM payments WHERE id = $2 AND status = 'APPROVED'
             ON CONFLICT (payment_id) DO NOTHING
+            RETURNING amount_cents, currency
             """, connection, transaction);
         cmd.Parameters.Add(new NpgsqlParameter { Value = refundId });
         cmd.Parameters.Add(new NpgsqlParameter { Value = paymentId });
-        cmd.Parameters.Add(new NpgsqlParameter { Value = amount });
-        cmd.Parameters.Add(new NpgsqlParameter { Value = currency });
-        if (await cmd.ExecuteNonQueryAsync(ct) == 0)
+        long amount;
+        string currency;
+        await using (var reader = await cmd.ExecuteReaderAsync(ct))
         {
-            throw new StaleEventException("payment unknown, not approved, or already refunded");
+            if (!await reader.ReadAsync(ct))
+            {
+                throw new StaleEventException("payment unknown, not approved, or already refunded");
+            }
+            amount = reader.GetInt64(0);
+            currency = reader.GetString(1);
         }
 
         var refunded = Envelope.Create(envelope.CorrelationId, "PaymentRefunded", 1, new
