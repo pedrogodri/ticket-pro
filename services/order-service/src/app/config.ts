@@ -31,6 +31,8 @@ export interface Config {
   paymentTimeoutMs: number;
   /** ORDER_CREATED_VERSION: OrderCreated version to publish, 1 or 2 (RFC 0001 §5.5). */
   orderCreatedVersion: OrderCreatedVersion;
+  /** Deadline scanner (RFC 0003 §5.1): ORDER_DEADLINE_SCAN_INTERVAL_MS, ORDER_DEADLINE_SCAN_BATCH_SIZE. */
+  deadlineScan: { intervalMs: number; batchSize: number };
 }
 
 const required = (name: string) => z.string().trim().min(1, `${name} is required`);
@@ -65,6 +67,11 @@ const envSchema = z.object({
   CONSUMER_CONCURRENCY: positiveInt("CONSUMER_CONCURRENCY", 4),
   SQS_WAIT_TIME_S: positiveInt("SQS_WAIT_TIME_S", 10),
   ORDER_PAYMENT_TIMEOUT_MS: positiveInt("ORDER_PAYMENT_TIMEOUT_MS", 15_000),
+  ORDER_DEADLINE_SCAN_INTERVAL_MS: positiveInt("ORDER_DEADLINE_SCAN_INTERVAL_MS", 1000),
+  ORDER_DEADLINE_SCAN_BATCH_SIZE: positiveInt("ORDER_DEADLINE_SCAN_BATCH_SIZE", 50),
+  // Only for the boot check below (the inventory owns the reservation TTL).
+  RESERVATION_TTL_MS: positiveInt("RESERVATION_TTL_MS", 60_000),
+  RESERVATION_SAFETY_MARGIN_MS: positiveInt("RESERVATION_SAFETY_MARGIN_MS", 30_000),
   ORDER_CREATED_VERSION: z
     .enum(["1", "2"], { error: "ORDER_CREATED_VERSION must be 1 or 2" })
     .default("2")
@@ -111,6 +118,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     throw new Error(`Invalid configuration: ${problems.join("; ")}`);
   }
   const e = parsed.data;
+  // RFC 0003 decision 4 (LOCKED): an OrderConfirmed must always find the reservation PENDING.
+  if (e.RESERVATION_TTL_MS < e.ORDER_PAYMENT_TIMEOUT_MS + e.RESERVATION_SAFETY_MARGIN_MS) {
+    throw new Error(
+      `Invalid configuration: RESERVATION_TTL_MS (${String(e.RESERVATION_TTL_MS)}) must be >= ORDER_PAYMENT_TIMEOUT_MS (${String(e.ORDER_PAYMENT_TIMEOUT_MS)}) + RESERVATION_SAFETY_MARGIN_MS (${String(e.RESERVATION_SAFETY_MARGIN_MS)})`,
+    );
+  }
   return {
     serviceName: e.SERVICE_NAME,
     port: e.PORT,
@@ -133,5 +146,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     consumer: { concurrency: e.CONSUMER_CONCURRENCY, waitTimeSeconds: e.SQS_WAIT_TIME_S },
     paymentTimeoutMs: e.ORDER_PAYMENT_TIMEOUT_MS,
     orderCreatedVersion: e.ORDER_CREATED_VERSION,
+    deadlineScan: {
+      intervalMs: e.ORDER_DEADLINE_SCAN_INTERVAL_MS,
+      batchSize: e.ORDER_DEADLINE_SCAN_BATCH_SIZE,
+    },
   };
 }

@@ -185,9 +185,13 @@ describe("purchase saga (arquitetura §6)", () => {
     expect(await handle("PaymentApproved", approved(pending))).toBe("stale");
     expect((await orderOf(pending))?.status).toBe("PENDING");
 
+    // F3 (RFC 0003 §5.7): a late approval no longer stays AWAITING_PAYMENT, it cancels and refunds.
     const late = await newOrder("AWAITING_PAYMENT", new Date(Date.now() - 1000).toISOString());
-    expect(await handle("PaymentApproved", approved(late))).toBe("stale");
-    expect((await orderOf(late))?.status).toBe("AWAITING_PAYMENT");
+    expect(await handle("PaymentApproved", approved(late))).toBe("ok");
+    expect(await orderOf(late)).toMatchObject({
+      status: "CANCELLED",
+      cancel_reason: "PAYMENT_TIMEOUT",
+    });
 
     const id = await newOrder("PENDING");
     expect(await handle("InventoryReserved", reserved(id))).toBe("ok");

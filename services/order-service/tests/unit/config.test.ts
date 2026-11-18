@@ -58,6 +58,7 @@ describe("loadConfig", () => {
       consumer: { concurrency: 4, waitTimeSeconds: 10 },
       paymentTimeoutMs: 15_000,
       orderCreatedVersion: 2,
+      deadlineScan: { intervalMs: 1000, batchSize: 50 },
     });
   });
 
@@ -71,6 +72,14 @@ describe("loadConfig", () => {
     expect(config.outbox.batchSize).toBe(10);
     expect(config.httpClientTimeoutMs).toBe(500);
     expect(config.awsEndpointUrl).toBe("http://ministack:4566");
+  });
+
+  // RFC 0003 decision 4 (LOCKED): both services refuse to start if the reservation can expire first.
+  it("fails when RESERVATION_TTL_MS < ORDER_PAYMENT_TIMEOUT_MS + RESERVATION_SAFETY_MARGIN_MS", () => {
+    expect(() => loadConfig({ ...validEnv(), RESERVATION_TTL_MS: "40000" })).toThrow(
+      /RESERVATION_TTL_MS.*ORDER_PAYMENT_TIMEOUT_MS.*RESERVATION_SAFETY_MARGIN_MS/,
+    );
+    expect(() => loadConfig({ ...validEnv(), RESERVATION_TTL_MS: "45000" })).not.toThrow();
   });
 
   it("publishes OrderCreated v1 when ORDER_CREATED_VERSION=1 (RFC 0001 §5.5 demo)", () => {
