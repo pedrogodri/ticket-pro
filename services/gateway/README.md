@@ -41,6 +41,8 @@ Ponto de entrada único do Ticket Pro, em Go. É o único serviço que publica p
 
 O IP é o do peer TCP. `X-Forwarded-For` é ignorado, porque o gateway é a borda e esse header viria do próprio cliente.
 
+Requisições com token inválido nas rotas protegidas contam num bucket `authfail:<ip>`, com a mesma regra das rotas públicas. Passado o limite, a resposta é 429; tokens válidos não contam nesse bucket.
+
 ## Eventos
 
 | Publica | Consome (fila `ticketpro-gateway`) |
@@ -76,6 +78,7 @@ Como `SET` com o mesmo TTL é idempotente, o consumidor não precisa de tabela d
 | `GATEWAY_MAX_BODY_BYTES`, `GATEWAY_UPSTREAM_TIMEOUT_MS` | não | 65536, 5000 |
 | `REDIS_URL` | sim | `redis://gateway-redis:6379/0` |
 | `REDIS_TIMEOUT_MS` | não | 200 (passou disso, fail-open) |
+| `REDIS_COOLDOWN_MS` | não | 5000: depois de uma falha do Redis, as checagens ficam suspensas por esse tempo (fail-open, um log) |
 | `QUEUE_URL`, `CONTRACTS_DIR` | sim | fila `ticketpro-gateway`, `/contracts` |
 | `SQS_WAIT_TIME_S`, `HTTP_CLIENT_TIMEOUT_MS` | não | 10, 3000 |
 | `RATE_LIMIT_*`, `AUTH_LOGIN_*`, `ORDERS_*` | não | ver *Rate limit* |
