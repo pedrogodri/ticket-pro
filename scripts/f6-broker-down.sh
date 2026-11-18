@@ -32,5 +32,8 @@ case "$state" in
     fail "order stuck in AWAITING_PAYMENT: the relays' backoff after the outage pushed the payment past the deadline, and the order has no deadline scanner yet (PaymentRequested published: $late)" ;;
   *) fail "order still $state 90s after unpause" ;;
 esac
-[ "$(sql orders "SELECT count(*) FROM outbox WHERE published_at IS NULL AND payload->>'orderId' = '$ORDER'")" = 0 ] && pass "outbox drained" || fail "outbox still has unpublished rows"
+# The final transition enqueues one more event (OrderConfirmed/OrderCancelled): give the relay a moment.
+unpublished() { sql orders "SELECT count(*) FROM outbox WHERE published_at IS NULL AND payload->>'orderId' = '$ORDER'"; }
+for _ in $(seq 1 30); do [ "$(unpublished)" = 0 ] && break; sleep 0.5; done
+[ "$(unpublished)" = 0 ] && pass "outbox drained" || fail "outbox still has unpublished rows"
 finish

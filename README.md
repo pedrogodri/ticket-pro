@@ -19,7 +19,7 @@ Backend distribuído de venda de ingressos, trabalho final de Sistemas Distribu�
 
 **No Docker Desktop:**
 
-- Em *Settings → Resources*, deixe ≥ 6 GB de memória: a stack completa tem ~11 containers.
+- Em *Settings → Resources*, deixe ≥ 6 GB de memória: a stack completa tem ~25 containers (inventory, order e payment com 2 réplicas cada, um banco por serviço).
 - Em *Settings → Advanced*, marque **"Allow the default Docker socket to be used"**. Os testes de integração (Testcontainers) e o modo `TOOLCHAIN=docker` usam `/var/run/docker.sock`.
 
 ### 2. Subir a stack
@@ -46,6 +46,8 @@ O `docker compose ps` deve mostrar os 8 serviços `healthy`. O `verify-infra.sh`
 |---|---|
 | `gateway` | Único serviço com porta no host: http://localhost:8080 |
 | `auth-service`, `user-service`, `order-service`, `inventory-service`, `payment-service`, `notification-service`, `autoscaler` | Serviços internos (rede `ticketpro-backend`), sem porta no host |
+| `gateway-redis` | Redis só do gateway (revogação de token e rate limit), sem porta no host |
+| `*-db` + `*-migrate` | Um PostgreSQL por serviço e o job Flyway que aplica as migrations (termina com código 0) |
 | `ministack` | AWS emulada: SNS, SQS, S3 e Secrets Manager |
 | `infra-init` | Roda o Terraform e **termina com código 0**. No Docker Desktop/OrbStack ele aparece parado (vermelho/cinza), e isso é o esperado. |
 | `otel-collector` + `jaeger` | Traces. Jaeger UI em http://localhost:16686 |
@@ -57,13 +59,13 @@ Para derrubar: `docker compose down` (mantém volumes) ou `docker compose down -
 | Serviço | Linguagem | Dono | Comece por |
 |---|---|---|---|
 | [gateway](services/gateway/README.md) | Go | Pedro | RFC 0002 |
-| [inventory-service](services/inventory-service/README.md) | Go | Pedro | ADR-0007, saga |
-| [notification-service](services/notification-service/README.md) | Go | Pedro + Matheus | ADR-0006 |
+| [inventory-service](services/inventory-service/README.md) | Java | Felipe | ADR-0007, saga |
+| [notification-service](services/notification-service/README.md) | Go | Pedro | ADR-0006 |
 | [autoscaler](services/autoscaler/README.md) | Go | Pedro | ADR-0015 (F4) |
 | [auth-service](services/auth-service/README.md) | Java | Felipe | RFC 0002 |
 | [payment-service](services/payment-service/README.md) | C# | Gabriel | RFC 0003 §5.6 |
 | [user-service](services/user-service/README.md) | C# | Yasmin | CQRS, BOLA |
-| [order-service](services/order-service/README.md) | TypeScript | Matheus | Saga, RFC 0003 |
+| [order-service](services/order-service/README.md) | Java | Matheus | Saga, RFC 0003 |
 
 O README de cada serviço traz responsabilidades, endpoints, eventos, tabelas, o que ler e as próximas tarefas.
 
@@ -103,7 +105,21 @@ make run         # sobe só este serviço
 4. [`docs/adr/`](docs/adr/README.md): as decisões e o porquê de cada uma.
 5. [`contracts/`](contracts/README.md): os schemas de cada evento, fonte da verdade das mensagens.
 6. [`docs/roadmap.md`](docs/roadmap.md): fases, donos e checkpoints.
-7. [`docs/superpowers/plans/2026-11-12-f1-platform.md`](docs/superpowers/plans/2026-11-12-f1-platform.md): o plano da fase atual (F1), tarefa por tarefa.
+7. [`docs/superpowers/plans/`](docs/superpowers/plans/): os planos de cada fase e entrega, tarefa por tarefa.
+
+## Testar e demonstrar
+
+Com a stack no ar, o caminho feliz completo:
+
+```bash
+scripts/happy-path.sh   # cadastro → login → pedido → CONFIRMED → ingressos → comprovante no S3
+```
+
+O roteiro da apresentação está em [`docs/runbook.md`](docs/runbook.md): o caminho feliz, os cenários de falha F1–F8 e os bônus, com comando, o que observar e o resultado esperado de cada um. Os 8 cenários de uma vez:
+
+```bash
+for f in scripts/f[1-8]-*.sh; do $f | tail -1; done
+```
 
 ## Fluxo de trabalho
 
@@ -127,3 +143,9 @@ As regras completas para devs e agentes de IA estão em [`AGENTS.md`](AGENTS.md)
 | `scripts/sync-shared.sh [--check]` | Copia `shared/go`, `shared/dotnet` e `contracts/` para os serviços (ADR-0017); `--check` falha se alguma cópia divergir |
 | `scripts/check-ports.sh` | Garante que só o gateway (e o Jaeger) publicam porta |
 | `scripts/check-autonomy.sh services/<svc>` | Copia o serviço para fora do repo, roda `make test` e `docker build`, e confere usuário não-root |
+| `scripts/happy-path.sh` | Compra de ponta a ponta pelo gateway (R3) |
+| `scripts/check-replicas.sh [runs]` | Confere que cada réplica de order, inventory e payment consumiu mensagens (R4) |
+| `scripts/f1-*.sh` … `scripts/f8-*.sh` | Cenários de falha F1–F8, com verificação automática ([runbook](docs/runbook.md)) |
+| `scripts/dlq.sh list\|show\|redrive <svc>` | Contagem, conteúdo e redrive das DLQs |
+| `scripts/gateway-check.sh` | Revogação de token e rate limit, ao vivo |
+| `scripts/demo-versioning.sh`, `scripts/demo-autoscale.sh` | Demos dos bônus de versionamento e autoescala |
