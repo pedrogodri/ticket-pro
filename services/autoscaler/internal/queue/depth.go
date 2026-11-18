@@ -3,6 +3,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -43,6 +44,10 @@ func (r *Reader) Depth(ctx context.Context, name string) (int, error) {
 		},
 	})
 	if err != nil {
+		var missing *sqstypes.QueueDoesNotExist
+		if errors.As(err, &missing) {
+			r.forget(name) // recreated queues get a new URL: resolve it again next time
+		}
 		return 0, err
 	}
 	total := 0
@@ -58,6 +63,12 @@ func (r *Reader) Depth(ctx context.Context, name string) (int, error) {
 		total += n
 	}
 	return total, nil
+}
+
+func (r *Reader) forget(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.urls, name)
 }
 
 func (r *Reader) url(ctx context.Context, name string) (string, error) {

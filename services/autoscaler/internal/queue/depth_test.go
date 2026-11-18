@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
 
 type fakeSQS struct {
@@ -45,5 +46,26 @@ func TestDepthReportsErrors(t *testing.T) {
 	bad := &fakeSQS{attrs: map[string]string{"ApproximateNumberOfMessages": "x"}}
 	if _, err := NewReader(bad).Depth(context.Background(), "q"); err == nil {
 		t.Fatal("want error on a non-numeric attribute")
+	}
+}
+
+// A recreated queue (MiniStack restart + infra-init) gets a new URL: drop the cached one on
+// QueueDoesNotExist so the next check resolves it again instead of failing forever.
+func TestMissingQueueDropsTheCachedURL(t *testing.T) {
+	f := &fakeSQS{attrs: map[string]string{"ApproximateNumberOfMessages": "1"}}
+	r := NewReader(f)
+	if _, err := r.Depth(context.Background(), "q"); err != nil {
+		t.Fatal(err)
+	}
+	f.err = &sqstypes.QueueDoesNotExist{Message: aws.String("gone")}
+	if _, err := r.Depth(context.Background(), "q"); err == nil {
+		t.Fatal("want the error")
+	}
+	f.err = nil
+	if _, err := r.Depth(context.Background(), "q"); err != nil {
+		t.Fatal(err)
+	}
+	if f.urlCalls != 2 {
+		t.Fatalf("GetQueueUrl called %d times, want 2 (re-resolved after QueueDoesNotExist)", f.urlCalls)
 	}
 }
