@@ -4,7 +4,10 @@ Registro de notificações e comprovantes de compra no S3 do Ticket Pro, em Go. 
 
 **Donos:** Pedro e Matheus.
 
-**Estado:** F2: consome `TicketsIssued` (grava `receipts/{orderId}.json` no S3 e registra a notificação) e `OrderCancelled` (registra a notificação). Readiness com `db` e `broker` (consumidor).
+**Estado:** completo:
+- consome `TicketsIssued` (grava `receipts/{orderId}.json` no S3 e registra a notificação) e `OrderCancelled` (registra a notificação);
+- readiness com `db` e `broker`;
+- tracing HTTP, de banco e de mensagens.
 
 ## Responsabilidades
 

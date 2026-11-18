@@ -65,7 +65,7 @@ func TestLoadConfig_RedisDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.RedisURL != "redis://gateway-redis:6379/0" || cfg.RedisTimeout != 200*time.Millisecond {
+	if cfg.RedisURL != "redis://gateway-redis:6379/0" || cfg.RedisTimeout != 200*time.Millisecond || cfg.RedisCooldown != 5*time.Second {
 		t.Fatalf("redis %q %v", cfg.RedisURL, cfg.RedisTimeout)
 	}
 }

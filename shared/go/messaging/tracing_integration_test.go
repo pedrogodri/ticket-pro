@@ -5,6 +5,7 @@ package messaging_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -88,7 +89,20 @@ func TestConsumerSpanRecordsHandlerFailure(t *testing.T) {
 	f := setup(t, map[string]messaging.Handler{"TokenRevoked": &effectHandler{result: errors.New("boom")}})
 	f.sendWithTraceparent(example(t, "TokenRevoked.v1", msgID), "")
 	f.receiveAndProcess(f.queueURL)
-	if s := consumerSpan(t, rec); s.Status().Code != codes.Error {
+	s := consumerSpan(t, rec)
+	if s.Status().Code != codes.Error {
 		t.Fatalf("status %v, want Error", s.Status())
+	}
+	// The cause travels with the span, not only in the log.
+	found := false
+	for _, e := range s.Events() {
+		for _, a := range e.Attributes {
+			if a.Key == "exception.message" && strings.Contains(a.Value.AsString(), "boom") {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("no exception event with the handler error: %v", s.Events())
 	}
 }

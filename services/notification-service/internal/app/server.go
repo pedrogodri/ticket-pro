@@ -1,6 +1,7 @@
 package app
 
 import (
+	"regexp"
 	"strings"
 
 	"context"
@@ -45,7 +46,21 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger, handler http.Hand
 
 // traced opens a server span per request (ADR-0012); the health probes are left out to keep traces readable.
 func traced(h http.Handler, service string) http.Handler {
-	return otelhttp.NewHandler(h, service, otelhttp.WithFilter(func(r *http.Request) bool {
-		return !strings.HasPrefix(r.URL.Path, "/health/")
-	}))
+	return otelhttp.NewHandler(h, service,
+		otelhttp.WithFilter(func(r *http.Request) bool { return !strings.HasPrefix(r.URL.Path, "/health/") }),
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string { return r.Method + " " + route(r.URL.Path) }),
+	)
 }
+
+// route collapses ids (UUIDs, numbers) to {id}: span names stay few and readable, and carry no data.
+func route(path string) string {
+	segments := strings.Split(path, "/")
+	for i, seg := range segments {
+		if idSegment.MatchString(seg) {
+			segments[i] = "{id}"
+		}
+	}
+	return strings.Join(segments, "/")
+}
+
+var idSegment = regexp.MustCompile(`^([0-9]+|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$`)

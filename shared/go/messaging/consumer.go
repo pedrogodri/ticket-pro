@@ -240,6 +240,7 @@ func (c *Consumer) Process(ctx context.Context, msg sqstypes.Message) (outcome O
 }
 
 func (c *Consumer) poison(ctx context.Context, log *slog.Logger, msg sqstypes.Message, cause error) Outcome {
+	trace.SpanFromContext(ctx).RecordError(cause) // no-op before the consumer span exists
 	attrs := []any{"poison", true, "error", cause.Error()}
 	if errors.Is(cause, envelope.ErrUnsupportedVersion) {
 		attrs = append(attrs, "reason", "unsupported_version")
@@ -250,6 +251,7 @@ func (c *Consumer) poison(ctx context.Context, log *slog.Logger, msg sqstypes.Me
 }
 
 func (c *Consumer) transient(ctx context.Context, log *slog.Logger, msg sqstypes.Message, cause error) Outcome {
+	trace.SpanFromContext(ctx).RecordError(cause) // no-op before the consumer span exists
 	receiveCount, _ := strconv.Atoi(msg.Attributes[string(sqstypes.MessageSystemAttributeNameApproximateReceiveCount)])
 	delay := retry.Delay(receiveCount, retry.DefaultBase, retry.DefaultCap, rand.Float64)
 	seconds := int32(max(1, math.Ceil(delay.Seconds())))

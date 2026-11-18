@@ -4,7 +4,14 @@ Catálogo de eventos, estoque por setor, reservas e emissão de ingressos do Tic
 
 **Dono:** Pedro.
 
-**Estado:** F2: catálogo com seed (`GET /events`, `GET /events/{id}`), reserva atômica (`OrderCreated` → `InventoryReserved`/`InventoryRejected`), emissão de ingressos (`OrderConfirmed` → `TicketsIssued`) e devolução de estoque (`OrderCancelled`). F3: job de expiração (`PENDING` vencida → `RELEASED`, estoque devolvido, `InventoryReservationExpired`), seguro em N réplicas (`SKIP LOCKED`), e boot recusado se `RESERVATION_TTL_MS < ORDER_PAYMENT_TIMEOUT_MS + RESERVATION_SAFETY_MARGIN_MS`. F4: `OrderCreated` v1 e v2 pelo upcaster (`channel` gravado na reserva) e versão não suportada para a DLQ ([demo](../../docs/demo/versioning.md)).
+**Estado:** completo (F2–F4):
+- catálogo com seed (`GET /events`, `GET /events/{id}`);
+- reserva atômica (`OrderCreated` v1/v2 → `InventoryReserved`/`InventoryRejected`, R2);
+- emissão de ingressos (`OrderConfirmed` → `TicketsIssued`);
+- devolução de estoque (`OrderCancelled`);
+- job de expiração (`InventoryReservationExpired`) e validação TTL × deadline no boot;
+- upcaster do `OrderCreated` v1 → v2 ([demo](../../docs/demo/versioning.md));
+- tracing HTTP, de banco e de mensagens.
 
 ## Responsabilidades
 

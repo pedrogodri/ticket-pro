@@ -3,12 +3,10 @@ package app
 import (
 	"context"
 	"net/http"
-	"time"
 )
 
-const pingTimeout = 2 * time.Second
-
-// Pinger checks the gateway's Redis (a *redis.Client wrapped by RedisPinger satisfies it).
+// Pinger checks the gateway's Redis (main wraps the *redis.Client in redisPinger). The client bounds
+// each command with REDIS_TIMEOUT_MS, so the probe needs no timeout of its own.
 type Pinger interface {
 	Ping(ctx context.Context) error
 }
@@ -24,10 +22,8 @@ func NewHealthHandler(redis Pinger, broker BrokerStatus) http.Handler {
 		writeJSON(w, `{"status":"up"}`)
 	})
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), pingTimeout)
-		defer cancel()
 		redisState, brokerState := "up", "up"
-		if err := redis.Ping(ctx); err != nil {
+		if err := redis.Ping(r.Context()); err != nil {
 			redisState = "degraded"
 		}
 		if !broker.BrokerUp() {

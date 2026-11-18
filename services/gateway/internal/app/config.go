@@ -25,6 +25,7 @@ type Config struct {
 	UpstreamTimeout   time.Duration
 	RedisURL          string        // REDIS_URL: the gateway's own Redis (revocation + rate limit)
 	RedisTimeout      time.Duration // REDIS_TIMEOUT_MS: per command; past it the check fails open
+	RedisCooldown     time.Duration // REDIS_COOLDOWN_MS: checks skipped for this long after a Redis failure
 	QueueURL          string        // QUEUE_URL: ticketpro-gateway (TokenRevoked)
 	ContractsDir      string        // CONTRACTS_DIR: vendored contracts for envelope validation
 	SQSWaitTimeS      int           // SQS_WAIT_TIME_S: long poll
@@ -58,6 +59,7 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		UpstreamTimeout:   r.millis("GATEWAY_UPSTREAM_TIMEOUT_MS", 5000),
 		RedisURL:          r.redisURL("REDIS_URL"),
 		RedisTimeout:      r.millis("REDIS_TIMEOUT_MS", 200),
+		RedisCooldown:     r.millis("REDIS_COOLDOWN_MS", 5000),
 		QueueURL:          r.required("QUEUE_URL"),
 		ContractsDir:      r.required("CONTRACTS_DIR"),
 		SQSWaitTimeS:      r.positiveInt("SQS_WAIT_TIME_S", 10),

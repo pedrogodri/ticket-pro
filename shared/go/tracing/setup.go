@@ -30,8 +30,17 @@ func Setup(ctx context.Context, cfg Config) (func(context.Context) error, error)
 	}
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(resource.NewSchemaless(semconv.ServiceName(cfg.ServiceName))),
+		sdktrace.WithResource(newResource(cfg.ServiceName)),
 	)
 	otel.SetTracerProvider(tp)
 	return tp.Shutdown, nil
+}
+
+// newResource merges service.name into the SDK defaults (telemetry.sdk.*, OTEL_RESOURCE_ATTRIBUTES).
+func newResource(service string) *resource.Resource {
+	res, err := resource.Merge(resource.Default(), resource.NewSchemaless(semconv.ServiceName(service)))
+	if err != nil { // only on conflicting schema URLs; keep at least the service name
+		return resource.NewSchemaless(semconv.ServiceName(service))
+	}
+	return res
 }

@@ -17,8 +17,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ticketpro/gateway/internal/platform/envelope"
 	"github.com/ticketpro/gateway/internal/platform/retry"
+	"github.com/ticketpro/gateway/internal/platform/tracing"
 )
 
 // Queue is the part of the SQS client the consumer uses.
@@ -82,6 +88,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 			QueueUrl:                    aws.String(c.cfg.QueueURL),
 			MaxNumberOfMessages:         10,
 			WaitTimeSeconds:             int32(c.cfg.WaitTimeS),
+			MessageAttributeNames:       []string{"traceparent"},
 			MessageSystemAttributeNames: []sqstypes.MessageSystemAttributeName{sqstypes.MessageSystemAttributeNameApproximateReceiveCount},
 		}, c.longPoll)
 		if err != nil {
@@ -115,8 +122,26 @@ type tokenRevoked struct {
 	Reason    string `json:"reason"`
 }
 
-// Process validates one message, stores the jti and acknowledges only after the write.
-func (c *Consumer) Process(ctx context.Context, msg sqstypes.Message) Outcome {
+// Process validates one message, stores the jti and acknowledges only after the write. It runs in a
+// consumer span that continues the producer's trace and links to it (ADR-0012).
+func (c *Consumer) Process(ctx context.Context, msg sqstypes.Message) (outcome Outcome) {
+	if tp, ok := msg.MessageAttributes["traceparent"]; ok {
+		ctx = tracing.Extract(ctx, aws.ToString(tp.StringValue))
+	}
+	opts := []trace.SpanStartOption{
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(attribute.String("messaging.system", "aws_sqs"), attribute.String("messaging.destination.name", c.cfg.QueueURL)),
+	}
+	if remote := trace.SpanContextFromContext(ctx); remote.IsValid() {
+		opts = append(opts, trace.WithLinks(trace.Link{SpanContext: remote}))
+	}
+	ctx, span := otel.Tracer("github.com/ticketpro/gateway/internal/revocation").Start(ctx, "process TokenRevoked", opts...)
+	defer func() {
+		if outcome != Succeeded {
+			span.SetStatus(codes.Error, map[Outcome]string{Poison: "poison", Transient: "transient"}[outcome])
+		}
+		span.End()
+	}()
 	body := []byte(aws.ToString(msg.Body))
 	log := c.cfg.Logger.With("sqsMessageId", aws.ToString(msg.MessageId))
 
@@ -140,6 +165,7 @@ func (c *Consumer) Process(ctx context.Context, msg sqstypes.Message) Outcome {
 		expiresAt, err = time.Parse(time.RFC3339Nano, p.ExpiresAt)
 	}
 	if err != nil {
+		span.RecordError(err)
 		log.WarnContext(ctx, "message_rejected", "poison", true, "error", err.Error())
 		c.changeVisibility(ctx, log, msg, 0) // reach maxReceiveCount fast → DLQ via redrive
 		return Poison
@@ -150,6 +176,7 @@ func (c *Consumer) Process(ctx context.Context, msg sqstypes.Message) Outcome {
 		receiveCount, _ := strconv.Atoi(msg.Attributes[string(sqstypes.MessageSystemAttributeNameApproximateReceiveCount)])
 		delay := retry.Delay(receiveCount, retry.DefaultBase, retry.DefaultCap, rand.Float64)
 		seconds := int32(max(1, math.Ceil(delay.Seconds())))
+		span.RecordError(err)
 		log.WarnContext(ctx, "message_retry", "error", err.Error(), "receiveCount", receiveCount, "visibilityS", seconds)
 		c.changeVisibility(ctx, log, msg, seconds)
 		return Transient
