@@ -26,3 +26,4 @@ node_modules/
 .env
 .superpowers/
 infra/terraform/.terraform/
+.claude/settings.local.json

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)",
+      "Bash(git push origin main*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean*)",
+      "Bash(docker compose down -v*)",
+      "Edit(/services/*/internal/platform/**)",
+      "Edit(/services/*/src/*/Platform/**)",
+      "Edit(/services/*/contracts/**)"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"LEMBRETE: se ainda nao leu nesta sessao, ler antes de responder: (1) AGENTS.md (2) docs/padroes.md (3) memoria do agente deste projeto (MEMORY.md), se existir\""
+          }
+        ]
+      }
+    ]
+  }
+}
