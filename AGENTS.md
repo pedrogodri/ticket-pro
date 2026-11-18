@@ -25,6 +25,27 @@ Infra: MiniStack (`AWS_ENDPOINT_URL=http://ministack:4566`), SNS→SQS+DLQ, S3, 
 
 Todos os 8 serviços têm `Makefile` e `.devcontainer/`. Sem o SDK no PATH, o `make` roda no container da linguagem (`TOOLCHAIN=docker`). Bancos: `<db>-db` + job `<svc>-migrate` (Flyway); credenciais de owner só em `db.env.example`.
 
+### Rodar um único teste
+Os alvos `make` não aceitam filtro: chame a ferramenta da linguagem direto, com o SDK local (ou dentro do Dev Container do serviço).
+
+| Linguagem | Unitário | Integração |
+|---|---|---|
+| Go | `go test ./internal/<pkg> -run TestNome` | mesmo comando + `-tags integration` (arquivos `*_integration_test.go`) |
+| Java | `./mvnw test -Dtest=Classe#metodo` | rodam no `./mvnw verify` |
+| C# | `dotnet test --filter "FullyQualifiedName~Nome&Category!=Integration"` | `--filter "Category=Integration"` (`[Trait("Category", "Integration")]`) |
+| TS | `npx vitest run <arquivo> -t "nome"` | `npx vitest run -c vitest.integration.config.ts <arquivo>` |
+
+Testes dos scripts: `scripts/tests/sync-shared.test.sh`. Cenários de falha da demo: `scripts/f1-*.sh` … `scripts/f8-*.sh` (exigem a stack no ar).
+
+## Arquitetura em uma tela
+- **Entrada única:** só o gateway publica porta; ele valida o JWT e injeta `X-User-Id`, e os demais serviços confiam só nesse header.
+- **Saga de compra orquestrada pelo order-service:** `PENDING → AWAITING_PAYMENT → CONFIRMED | CANCELLED`. Toda transição é `UPDATE ... WHERE id = ? AND status = <esperado>`, então evento duplicado ou fora de ordem não regride o estado. `PaymentApproved` para pedido já `CANCELLED` vira `RefundRequested` (status não muda).
+- **Publicar:** só pela tabela `outbox`, na mesma transação do efeito; um relay drena com backoff.
+- **Consumir:** valida → abre TX → `processed_messages` → efeito + outbox → commit → **só então** ack (RFC 0003 §5.4).
+- **Dois roles de banco por serviço:** `<svc>_app` (`DATABASE_URL`, API HTTP, sujeito a RLS via `SET LOCAL app.user_id`) e `<svc>_worker` (`DATABASE_WORKER_URL`, consumidores/relay/jobs, `BYPASSRLS`). Código de consumidor usa o worker; rota HTTP usa o app.
+- **Pagamento:** o consumidor grava `payments(PENDING)` e dá ack; um worker (`SKIP LOCKED` + lease) chama o provedor instável depois, fora de transação.
+- **Invariante validada no boot:** `RESERVATION_TTL_MS >= ORDER_PAYMENT_TIMEOUT_MS + RESERVATION_SAFETY_MARGIN_MS`. Mudar um desses valores exige ajustar os outros.
+
 ## External References
 | Need | File |
 |---|---|
@@ -40,7 +61,7 @@ Todos os 8 serviços têm `Makefile` e `.devcontainer/`. Sem o SDK no PATH, o `m
 ## Never
 - Acessar o banco de outro serviço; dados alheios só chegam por evento.
 - Referenciar `../` fora da pasta do serviço (código, Dockerfile, build): cada `services/<svc>` é autônomo (ADR-0016).
-- Editar `internal/platform/`, `src/Platform/` ou `contracts/` dentro de um serviço: são cópias; altere `shared/` ou `contracts/` da raiz e rode `scripts/sync-shared.sh`.
+- Editar `services/*/internal/platform/` (Go), `services/*/src/<Projeto>/Platform/` (C#) ou `services/*/contracts/`: são cópias; altere `shared/` ou `contracts/` da raiz e rode `scripts/sync-shared.sh`. (O `services/order-service/src/Platform/` é código próprio do serviço, não cópia.)
 - Publicar no SNS fora do outbox ou dar ack antes do commit.
 - Editar migration já aplicada; crie `V<next>__*.sql`.
 - Hardcodar endpoint, nome de fila/tópico, credencial, timeout ou taxa: use env.
@@ -50,7 +71,7 @@ Todos os 8 serviços têm `Makefile` e `.devcontainer/`. Sem o SDK no PATH, o `m
 - Commitar na `main` ou dar push sem pedido explícito; usar git worktrees.
 
 ## Always
-- Mensagem nova ou alterada: schema + exemplo + `contracts/asyncapi.yaml` + `npm run validate`, no mesmo PR.
+- Mensagem nova ou alterada: schema + exemplo + `contracts/asyncapi.yaml` + `make -C contracts check` + `scripts/sync-shared.sh`, no mesmo PR.
 - Decisão arquitetural nova: ADR em `docs/adr/` (ADR aceito não se edita; substitua).
 - Mudança de schema de banco: migration Flyway em `services/<svc>/migrations/`.
 - Commits Conventional com escopo da pasta: `feat(order-service): ...`, `chore(shared): sync ...`.
