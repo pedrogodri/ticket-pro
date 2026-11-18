@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -55,7 +56,11 @@ type Config struct {
 	Revocations     RevocationChecker // nil: no revocation check
 	Limiter         RateLimiter       // nil: no rate limit
 	Limits          Limits
-	Logger          *slog.Logger
+	// RedisCooldown (REDIS_COOLDOWN_MS): after a Redis failure, revocation and rate limit checks are
+	// skipped (fail-open) for this long instead of paying the timeout on every request. 0 = always try.
+	RedisCooldown time.Duration
+	Now           func() time.Time // injectable clock; nil = time.Now
+	Logger        *slog.Logger
 }
 
 type ctxKey struct{}
@@ -81,6 +86,14 @@ func New(cfg Config) http.Handler {
 			problem.Write(w, r, http.StatusBadGateway, "BAD_GATEWAY", correlationID)
 		}
 		proxies[name] = rp
+	}
+
+	if cfg.Now == nil {
+		cfg.Now = time.Now
+	}
+	guard := &redisGuard{cooldown: cfg.RedisCooldown, now: cfg.Now, logger: cfg.Logger}
+	allow := func(w http.ResponseWriter, r *http.Request, key string, rule ratelimit.Rule, correlationID string) bool {
+		return allowRequest(w, r, cfg, guard, key, rule, correlationID)
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +123,7 @@ func New(cfg Config) http.Handler {
 			if route == "POST /auth/login" {
 				key, rule = "login:"+clientIP(r), cfg.Limits.Login
 			}
-			if !allow(w, r, cfg, key, rule, correlationID) {
+			if !allow(w, r, key, rule, correlationID) {
 				return
 			}
 		} else {
@@ -122,15 +135,20 @@ func New(cfg Config) http.Handler {
 					reason = err.Error()
 				}
 				cfg.Logger.Info("token_rejected", "reason", reason, "path", r.URL.Path, "correlationId", correlationID)
+				// Invalid tokens cost a signature check each: throttle them per IP (valid ones are not counted).
+				if !allow(w, r, "authfail:"+clientIP(r), cfg.Limits.Public, correlationID) {
+					return
+				}
 				w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
 				problem.Write(w, r, http.StatusUnauthorized, "UNAUTHENTICATED", correlationID)
 				return
 			}
-			if cfg.Revocations != nil {
+			if cfg.Revocations != nil && guard.available() {
 				revoked, err := cfg.Revocations.IsRevoked(r.Context(), claims.ID)
 				if err != nil {
 					// Fail-open (ADR-0014): the exposure is bounded by the 15 min access token TTL.
 					cfg.Logger.Warn("revocation_check_unavailable", "error", err.Error(), "correlationId", correlationID)
+					guard.failed()
 				} else if revoked {
 					cfg.Logger.Info("token_rejected", "reason", "token revoked", "path", r.URL.Path, "correlationId", correlationID)
 					w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
@@ -142,7 +160,7 @@ func New(cfg Config) http.Handler {
 			if route == "POST /orders" {
 				key, rule = "orders:"+claims.Subject, cfg.Limits.Orders
 			}
-			if !allow(w, r, cfg, key, rule, correlationID) {
+			if !allow(w, r, key, rule, correlationID) {
 				return
 			}
 			r.Header.Set("X-User-Id", claims.Subject)
@@ -155,13 +173,14 @@ func New(cfg Config) http.Handler {
 }
 
 // allow applies the bucket; false means a 429 was written. Redis errors fail open (ADR-0014).
-func allow(w http.ResponseWriter, r *http.Request, cfg Config, key string, rule ratelimit.Rule, correlationID string) bool {
-	if cfg.Limiter == nil {
+func allowRequest(w http.ResponseWriter, r *http.Request, cfg Config, guard *redisGuard, key string, rule ratelimit.Rule, correlationID string) bool {
+	if cfg.Limiter == nil || !guard.available() {
 		return true
 	}
 	d, err := cfg.Limiter.Allow(r.Context(), key, rule)
 	if err != nil {
 		cfg.Logger.Warn("rate_limit_unavailable", "error", err.Error(), "correlationId", correlationID)
+		guard.failed()
 		return true
 	}
 	if d.Allowed {
@@ -172,6 +191,27 @@ func allow(w http.ResponseWriter, r *http.Request, cfg Config, key string, rule 
 	w.Header().Set("Retry-After", strconv.Itoa(seconds))
 	problem.Write(w, r, http.StatusTooManyRequests, "RATE_LIMITED", correlationID)
 	return false
+}
+
+// redisGuard suspends the Redis checks for cooldown after a failure, so an outage costs one timeout
+// and one log line per cooldown instead of two of each per request.
+type redisGuard struct {
+	cooldown  time.Duration
+	now       func() time.Time
+	logger    *slog.Logger
+	skipUntil atomic.Int64 // unix nanos
+}
+
+func (g *redisGuard) available() bool { return g.now().UnixNano() >= g.skipUntil.Load() }
+
+func (g *redisGuard) failed() {
+	if g.cooldown <= 0 {
+		return
+	}
+	until := g.now().Add(g.cooldown)
+	if prev := g.skipUntil.Swap(until.UnixNano()); g.now().UnixNano() >= prev {
+		g.logger.Warn("redis_checks_suspended", "until", until.UTC().Format(time.RFC3339))
+	}
 }
 
 // clientIP is the TCP peer. X-Forwarded-For is ignored: the gateway is the edge, so any value

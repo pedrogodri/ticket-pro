@@ -87,6 +87,7 @@ func main() {
 		UpstreamTimeout: cfg.UpstreamTimeout,
 		Verifier:        verifier,
 		Revocations:     revocations,
+		RedisCooldown:   cfg.RedisCooldown,
 		Limiter:         ratelimit.Limiter{Client: rdb, Clock: time.Now},
 		Limits: proxy.Limits{
 			Default: rule(cfg.Limits.Default), Public: rule(cfg.Limits.Public),

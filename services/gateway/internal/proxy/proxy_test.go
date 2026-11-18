@@ -274,3 +274,59 @@ func TestRateLimiterDownFailsOpen(t *testing.T) {
 		t.Fatalf("status %d forwarded=%v logs %s", rec.Code, s.called, logs.String())
 	}
 }
+
+type countingRevocations struct {
+	calls int
+	err   error
+}
+
+func (c *countingRevocations) IsRevoked(context.Context, string) (bool, error) {
+	c.calls++
+	return false, c.err
+}
+
+// A Redis outage is checked once, then skipped for RedisCooldown: no 2×timeout per request, one log line.
+func TestRedisOutageIsSkippedDuringTheCooldown(t *testing.T) {
+	var s seen
+	var logs strings.Builder
+	rev := &countingRevocations{err: io.ErrUnexpectedEOF}
+	lim := &fakeLimiter{err: io.ErrUnexpectedEOF}
+	now := time.Unix(1_800_000_000, 0)
+	h := handlerWith(t, &s, func(c *Config) {
+		c.Revocations, c.Limiter, c.Limits = rev, lim, testLimits
+		c.RedisCooldown, c.Now = 5*time.Second, func() time.Time { return now }
+		c.Logger = slog.New(slog.NewTextHandler(&logs, nil))
+	})
+	for range 3 {
+		if rec := doFrom(h, "GET", "/me", "good", "10.0.0.1:5000", nil); rec.Code != 200 {
+			t.Fatalf("status %d, want 200 (fail-open)", rec.Code)
+		}
+	}
+	if rev.calls != 1 || len(lim.keys) != 0 {
+		t.Fatalf("revocation calls %d, limiter calls %v: want Redis touched once", rev.calls, lim.keys)
+	}
+	if strings.Count(logs.String(), "redis_checks_suspended") != 1 {
+		t.Fatalf("logs %s", logs.String())
+	}
+	now = now.Add(5 * time.Second)
+	doFrom(h, "GET", "/me", "good", "10.0.0.1:5000", nil)
+	if rev.calls != 2 {
+		t.Fatalf("after the cooldown Redis must be tried again (calls %d)", rev.calls)
+	}
+}
+
+// Garbage tokens are rate limited per IP before costing a signature check each.
+func TestInvalidTokensAreRateLimitedPerIP(t *testing.T) {
+	var s seen
+	lim := &fakeLimiter{deny: map[string]bool{"authfail:10.0.0.9": true}}
+	h := handlerWith(t, &s, withLimiter(lim))
+	if rec := doFrom(h, "GET", "/me", "forged", "10.0.0.9:5000", nil); rec.Code != 429 || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("status %d, want 429", rec.Code)
+	}
+	if rec := doFrom(h, "GET", "/me", "forged", "10.0.0.1:5000", nil); rec.Code != 401 {
+		t.Fatalf("another IP: status %d, want 401", rec.Code)
+	}
+	if rec := doFrom(h, "GET", "/me", "good", "10.0.0.9:5000", nil); rec.Code != 200 {
+		t.Fatalf("a valid token from the throttled IP: status %d, want 200", rec.Code)
+	}
+}
