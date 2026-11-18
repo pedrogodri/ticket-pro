@@ -3,6 +3,7 @@ import { SQSClient } from "@aws-sdk/client-sqs";
 import { loadConfig, type Config } from "./app/config.js";
 import { buildServer } from "./app/server.js";
 import { registerOrderRoutes } from "./modules/orders/http/routes.js";
+import { createDeadlineScanner } from "./modules/orders/application/deadlineScanner.js";
 import { createSagaHandlers } from "./modules/orders/application/saga.js";
 import { SqsConsumer } from "./platform/consumer.js";
 import { createValidator } from "./platform/validator.js";
@@ -68,15 +69,20 @@ const consumer = new SqsConsumer(
   },
   logger,
 );
+const scanner = createDeadlineScanner(workerPool, {
+  topicArn: config.topicArn,
+  ...config.deadlineScan,
+});
 const stopRelay = new AbortController();
 const relayDone = relay.run(stopRelay.signal);
 const consumerDone = consumer.run(stopRelay.signal);
+const scannerDone = scanner.run(stopRelay.signal, logger);
 
 const shutdown = async (signal: string): Promise<void> => {
   app.log.info({ signal }, "http_server_stopping");
   stopRelay.abort(); // the current batch finishes; unpublished rows stay in the outbox
   await app.close();
-  await Promise.all([relayDone, consumerDone]);
+  await Promise.all([relayDone, consumerDone, scannerDone]);
   await Promise.all([appPool.end(), workerPool.end()]);
   process.exit(0);
 };

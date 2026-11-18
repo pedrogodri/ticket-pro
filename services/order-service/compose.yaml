@@ -11,6 +11,7 @@ services:
     environment:
       ORDER_PAYMENT_TIMEOUT_MS: ${ORDER_PAYMENT_TIMEOUT_MS:-15000}
       RESERVATION_SAFETY_MARGIN_MS: ${RESERVATION_SAFETY_MARGIN_MS:-30000}
+      RESERVATION_TTL_MS: ${RESERVATION_TTL_MS:-60000}
       # Versioning demo (RFC 0001 §5.5): `ORDER_CREATED_VERSION=1 docker compose up -d order-service`.
       ORDER_CREATED_VERSION: ${ORDER_CREATED_VERSION:-2}
     networks: [backend, order-service-data]

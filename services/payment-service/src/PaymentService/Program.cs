@@ -63,7 +63,11 @@ if (builder.Configuration["AWS_ENDPOINT_URL"] is { Length: > 0 } sqsEndpoint)
 }
 builder.Services.AddSingleton(sp => new SqsConsumer(
     new AmazonSQSClient(sqsConfig), workerDb, new ContractValidator(config.ContractsDir),
-    new Dictionary<string, IMessageHandler> { ["PaymentRequested"] = new PaymentRequestedHandler() },
+    new Dictionary<string, IMessageHandler>
+    {
+        ["PaymentRequested"] = new PaymentRequestedHandler(),
+        ["RefundRequested"] = new RefundRequestedHandler(config.TopicArn),
+    },
     consumerOptions, sp.GetRequiredService<ILogger<SqsConsumer>>()));
 builder.Services.AddHostedService<ConsumerHostedService>();
 

@@ -36,6 +36,12 @@ const reservedPayload = z.object({
   currency: z.string(),
 });
 const orderIdPayload = z.object({ orderId: z.uuid() });
+const approvedPayload = z.object({
+  orderId: z.uuid(),
+  paymentId: z.uuid(),
+  amountCents: z.number().int(),
+  currency: z.string(),
+});
 
 function parse<T>(schema: z.ZodType<T>, env: Envelope): T {
   const result = schema.safeParse(env.payload);
@@ -58,23 +64,74 @@ async function cancel(
   client: PoolClient,
   options: SagaOptions,
   env: Envelope,
-  fromStatus: "PENDING" | "AWAITING_PAYMENT",
+  fromStatus: readonly ("PENDING" | "AWAITING_PAYMENT")[],
   reason: CancelReason,
 ): Promise<void> {
   const { orderId } = parse(orderIdPayload, env);
   const order = await transition(
     client,
-    `UPDATE orders SET status = 'CANCELLED', cancel_reason = $2, updated_at = now() WHERE id = $1 AND status = $3`,
+    `UPDATE orders SET status = 'CANCELLED', cancel_reason = $2, updated_at = now() WHERE id = $1 AND status = ANY($3)`,
     [orderId, reason, fromStatus],
   );
+  await enqueueCancelled(client, options, env.correlationId, order, reason);
+}
+
+async function enqueueCancelled(
+  client: PoolClient,
+  options: SagaOptions,
+  correlationId: string,
+  order: OrderRow,
+  reason: CancelReason,
+): Promise<void> {
   await enqueue(
     client,
     options.topicArn,
-    createEnvelope(env.correlationId, "OrderCancelled", 1, {
+    createEnvelope(correlationId, "OrderCancelled", 1, {
       orderId: order.id,
       userId: order.user_id,
       reason,
       cancelledAt: new Date().toISOString(),
+    }),
+  );
+}
+
+/**
+ * PaymentApproved that cannot confirm (RFC 0003 §5.7, F7). Still AWAITING_PAYMENT but past the deadline
+ * → CANCELLED(PAYMENT_TIMEOUT) + OrderCancelled + RefundRequested in this transaction; already CANCELLED
+ * without a refund → RefundRequested. refund_status IS NULL keeps a repeated approval to one refund.
+ */
+async function refundLateApproval(
+  client: PoolClient,
+  options: SagaOptions,
+  env: Envelope,
+  p: z.infer<typeof approvedPayload>,
+): Promise<void> {
+  const timedOut = await client.query<OrderRow>(
+    `UPDATE orders SET status = 'CANCELLED', cancel_reason = 'PAYMENT_TIMEOUT', refund_status = 'REQUESTED', updated_at = now()
+     WHERE id = $1 AND status = 'AWAITING_PAYMENT' AND payment_deadline_at < now()
+     RETURNING id, user_id, event_id, sector_id, quantity, total_cents, currency`,
+    [p.orderId],
+  );
+  const cancelledNow = timedOut.rows[0];
+  if (cancelledNow) {
+    await enqueueCancelled(client, options, env.correlationId, cancelledNow, "PAYMENT_TIMEOUT");
+  } else {
+    await transition(
+      client,
+      `UPDATE orders SET refund_status = 'REQUESTED', updated_at = now()
+       WHERE id = $1 AND status = 'CANCELLED' AND refund_status IS NULL`,
+      [p.orderId],
+    );
+  }
+  await enqueue(
+    client,
+    options.topicArn,
+    createEnvelope(env.correlationId, "RefundRequested", 1, {
+      orderId: p.orderId,
+      paymentId: p.paymentId,
+      amountCents: p.amountCents,
+      currency: p.currency,
+      reason: "LATE_APPROVAL",
     }),
   );
 }
@@ -114,22 +171,27 @@ export function createSagaHandlers(options: SagaOptions): ReadonlyMap<string, Me
       "InventoryRejected",
       {
         versions: v1,
-        handle: (env, client) => cancel(client, options, env, "PENDING", "OUT_OF_STOCK"),
+        handle: (env, client) => cancel(client, options, env, ["PENDING"], "OUT_OF_STOCK"),
       },
     ],
     [
       "PaymentApproved",
       {
         versions: v1,
-        // Step 5: confirm only while AWAITING_PAYMENT and within the deadline (late approval → F3 refund).
+        // Step 5: confirm only while AWAITING_PAYMENT and within the deadline; otherwise refund.
         handle: async (env, client) => {
-          const { orderId } = parse(orderIdPayload, env);
-          const order = await transition(
-            client,
+          const p = parse(approvedPayload, env);
+          const confirmed = await client.query<OrderRow>(
             `UPDATE orders SET status = 'CONFIRMED', updated_at = now()
-             WHERE id = $1 AND status = 'AWAITING_PAYMENT' AND payment_deadline_at >= now()`,
-            [orderId],
+             WHERE id = $1 AND status = 'AWAITING_PAYMENT' AND payment_deadline_at >= now()
+             RETURNING id, user_id, event_id, sector_id, quantity, total_cents, currency`,
+            [p.orderId],
           );
+          const order = confirmed.rows[0];
+          if (!order) {
+            await refundLateApproval(client, options, env, p);
+            return;
+          }
           await enqueue(
             client,
             options.topicArn,
@@ -151,7 +213,32 @@ export function createSagaHandlers(options: SagaOptions): ReadonlyMap<string, Me
       "PaymentFailed",
       {
         versions: v1,
-        handle: (env, client) => cancel(client, options, env, "AWAITING_PAYMENT", "PAYMENT_FAILED"),
+        handle: (env, client) =>
+          cancel(client, options, env, ["AWAITING_PAYMENT"], "PAYMENT_FAILED"),
+      },
+    ],
+    [
+      "InventoryReservationExpired",
+      {
+        versions: v1,
+        // Safety net (arquitetura §6 step 9): the inventory already released the stock.
+        handle: (env, client) =>
+          cancel(client, options, env, ["PENDING", "AWAITING_PAYMENT"], "RESERVATION_EXPIRED"),
+      },
+    ],
+    [
+      "PaymentRefunded",
+      {
+        versions: v1,
+        handle: async (env, client) => {
+          const { orderId } = parse(orderIdPayload, env);
+          await transition(
+            client,
+            `UPDATE orders SET refund_status = 'REFUNDED', updated_at = now()
+             WHERE id = $1 AND refund_status = 'REQUESTED'`,
+            [orderId],
+          );
+        },
       },
     ],
   ]);
