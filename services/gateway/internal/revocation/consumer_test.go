@@ -16,8 +16,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ticketpro/gateway/internal/platform/envelope"
+	"github.com/ticketpro/gateway/internal/platform/tracing"
 )
 
 type fakeQueue struct {
@@ -159,5 +164,33 @@ func TestReceiveExtendsTheHTTPTimeoutForTheLongPoll(t *testing.T) {
 	client, ok := q.receiveOpts.HTTPClient.(*http.Client)
 	if !ok || client.Timeout != 13*time.Second {
 		t.Fatalf("receive HTTP client %#v", q.receiveOpts.HTTPClient)
+	}
+}
+
+// ADR-0012: the TokenRevoked consumer span continues the producer's trace (raw delivery keeps the
+// traceparent in the SQS message attributes) and links to it.
+func TestConsumerSpanContinuesTheProducerTrace(t *testing.T) {
+	rec := tracetest.NewSpanRecorder()
+	tp := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(rec))
+	otel.SetTracerProvider(tp)
+	t.Cleanup(func() { _ = tp.Shutdown(context.Background()) })
+
+	c, _, _ := newConsumer(t, io.Discard)
+	ctx, producer := tp.Tracer("test").Start(context.Background(), "publish", trace.WithSpanKind(trace.SpanKindProducer))
+	msg := snsMessage(t, validPayload(now.Add(time.Minute)))
+	msg.MessageAttributes = map[string]sqstypes.MessageAttributeValue{
+		"traceparent": {DataType: aws.String("String"), StringValue: aws.String(tracing.Inject(ctx))},
+	}
+	producer.End()
+	c.Process(context.Background(), msg)
+
+	var span sdktrace.ReadOnlySpan
+	for _, s := range rec.Ended() {
+		if s.SpanKind() == trace.SpanKindConsumer {
+			span = s
+		}
+	}
+	if span == nil || span.SpanContext().TraceID() != producer.SpanContext().TraceID() || len(span.Links()) != 1 {
+		t.Fatalf("consumer span %+v", span)
 	}
 }
