@@ -22,7 +22,7 @@ Infra: MiniStack (`AWS_ENDPOINT_URL=http://ministack:4566`), SNS→SQS+DLQ, S3, 
 | Verificar infra AWS / bancos / portas / autonomia | `scripts/verify-infra.sh`, `scripts/verify-platform.sh`, `scripts/check-ports.sh`, `scripts/check-autonomy.sh services/<svc>` |
 | Testes das libs de plataforma | `make -C shared/go test test-integration`, `make -C shared/dotnet test test-integration` |
 
-Os serviços têm `Makefile` e `.devcontainer/`, exceto `order-service` e `inventory-service`, em migração para Java (ADR-0021) e ainda sem código, `Makefile` e `Dockerfile`. Sem o SDK no PATH, o `make` roda no container da linguagem (`TOOLCHAIN=docker`). Bancos: `<db>-db` + job `<svc>-migrate` (Flyway); credenciais de owner só em `db.env.example`.
+Todos os serviços têm `Makefile`, `Dockerfile` e `.devcontainer/`. `order-service` e `inventory-service` (ADR-0021) são só o scaffold de build em Java: sobem com `/health/live` e `/health/ready`, mas sem regra de negócio nem `platform/` (donos: Matheus e Felipe). Sem o SDK no PATH, o `make` roda no container da linguagem (`TOOLCHAIN=docker`). Bancos: `<db>-db` + job `<svc>-migrate` (Flyway); credenciais de owner só em `db.env.example`.
 
 ### Rodar um único teste
 Os alvos `make` não aceitam filtro: chame a ferramenta da linguagem direto, com o SDK local (ou dentro do Dev Container do serviço).

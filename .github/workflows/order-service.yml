@@ -1,0 +1,27 @@
+name: order-service
+
+on:
+  push:
+    branches: [main]
+    paths: ["services/order-service/**", ".github/workflows/order-service.yml"]
+  pull_request:
+    paths: ["services/order-service/**", ".github/workflows/order-service.yml"]
+
+defaults:
+  run:
+    working-directory: services/order-service
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - run: make lint typecheck test
+      - name: Integration tests (Testcontainers, Postgres + MiniStack)
+        run: make test-integration
+      - run: docker build .

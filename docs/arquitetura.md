@@ -248,7 +248,7 @@ Todos os serviços que publicam têm `outbox`, e todos os que consomem têm `pro
 - **Réplicas padrão:** order, inventory e payment sobem com 2 réplicas (`deploy.replicas`) consumindo a mesma fila (R4). O F8 sobe para 3 com `docker compose up --scale`.
 - **Relay de outbox com múltiplas réplicas:** `SELECT ... FOR UPDATE SKIP LOCKED LIMIT n`, sem coordenação externa.
 - **Jobs periódicos** (deadline scanner, expiração de reservas): mesmo padrão com `SKIP LOCKED`, seguro em N réplicas.
-- **Autoescala (bônus):** o autoscaler consulta `ApproximateNumberOfMessages` da fila do payment (e do inventory) a cada `AUTOSCALER_INTERVAL_S` e ajusta as réplicas pela Docker API entre `MIN` e `MAX`. *Ainda a validar: o MiniStack não documenta esse atributo.* O plano B é estimar a profundidade com `ReceiveMessage` + `VisibilityTimeout=0`, ou expor métrica de lag pelo próprio consumidor.
+- **Autoescala (bônus):** o autoscaler consulta `ApproximateNumberOfMessages` da fila do payment (e do inventory) a cada `AUTOSCALER_INTERVAL_S` e ajusta as réplicas pela Docker API entre `MIN` e `MAX`. O spike S7 (`docs/spikes/2026-11-12-ministack.md`) validou o atributo no MiniStack, então nenhum plano B foi necessário.
 - **Broker fora (F6):** o estado de SNS/SQS no MiniStack fica só em memória. O cenário usa `docker pause ministack` (ou desconexão de rede) para simular a indisponibilidade sem perder filas. Enquanto isso, o outbox acumula e o relay entra em backoff.
 
 ## 10. Observabilidade
