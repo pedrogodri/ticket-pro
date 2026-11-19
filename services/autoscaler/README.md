@@ -4,7 +4,13 @@ Autoescala de réplicas consumidoras pela profundidade das filas SQS ([ADR-0015]
 
 **Dono:** Pedro.
 
-**Estado:** F4: autoescala por profundidade de fila ([ADR-0015](../../docs/adr/0015-queue-depth-autoscaling-docker-api.md)). Lê `ApproximateNumberOfMessages` + `NotVisible`, decide `clamp(ceil(depth / MSGS_PER_REPLICA), MIN, MAX)` com cooldown para reduzir, e cria ou remove réplicas pela Docker Engine API.
+**Estado:** F4: autoescala por profundidade de fila ([ADR-0015](../../docs/adr/0015-queue-based-autoscaler.md)). Lê `ApproximateNumberOfMessages` + `NotVisible`, decide `clamp(ceil(depth / MSGS_PER_REPLICA), MIN, MAX)` com cooldown para reduzir, e cria ou remove réplicas pela Docker Engine API.
+
+Design: [RFC 0012](../../docs/rfc/0012-design-do-autoscaler-em-go.md). Plano: [autoscaler](../../docs/superpowers/plans/2026-11-19-autoscaler.md).
+
+## O que a demo prova
+
+`scripts/demo-autoscale.sh` **pausa** as réplicas do payment, acumula 40 `PaymentRequested` na fila, espera o autoscaler chegar a 5 réplicas (nunca acima de `AUTOSCALER_MAX_REPLICAS`), vê a fila drenar e, passado o cooldown, a volta para 2. Isso prova o **mecanismo** (fila → decisão → Docker API → vazão), mas não o caso de uso real: o consumidor do payment só grava `payments(PENDING)` e dá ack, então em operação normal a fila fica baixa e o backlog está na tabela `payments` (RFC 0012 §5.2, divergência D2). Diga isso na apresentação. O `f8-scale.sh` **para** o autoscaler para medir o `--scale 3`.
 
 ## Responsabilidades
 
@@ -30,8 +36,8 @@ Nenhum. O serviço só lê atributos das filas.
    - [ADR-0015](../../docs/adr/0015-queue-based-autoscaler.md);
    - [arquitetura](../../docs/arquitetura.md) §9;
    - [RFC 0003](../../docs/rfc/0003-failure-handling-strategy.md) §5.8 (F8).
-3. **F1:** Task 7 do [plano F1](../../docs/superpowers/plans/2026-11-12-f1-platform.md). Só confirmar o esqueleto, que já existe.
-4. **F4:** a lógica de escala ([roadmap](../../docs/roadmap.md)).
+3. Design e plano: [RFC 0012](../../docs/rfc/0012-design-do-autoscaler-em-go.md) e [plano](../../docs/superpowers/plans/2026-11-19-autoscaler.md).
+4. Demo ao vivo (stack no ar): `scripts/demo-autoscale.sh`.
 
 ## Variáveis de ambiente
 
