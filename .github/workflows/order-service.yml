@@ -16,12 +16,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - id: code
+        name: Detect source code (the services are implemented by their owners)
+        run: |
+          if [ -d src ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; echo "::notice::no src/ yet, skipping"; fi
       - uses: actions/setup-java@v4
+        if: steps.code.outputs.present == 'true'
         with:
           distribution: temurin
           java-version: "21"
           cache: maven
-      - run: make lint typecheck test
+      - if: steps.code.outputs.present == 'true'
+        run: make lint typecheck test
       - name: Integration tests (Testcontainers, Postgres + MiniStack)
+        if: steps.code.outputs.present == 'true'
         run: make test-integration
-      - run: docker build .
+      - if: steps.code.outputs.present == 'true'
+        run: docker build .
