@@ -30,6 +30,18 @@ Ponto de entrada único do Ticket Pro, em Go. É o único serviço que publica p
 | `GET /health/ready` | ✅ | `200 {"status":"up","checks":{"redis":"up","broker":"up"}}`; Redis ou broker fora → `degraded`, ainda 200 (fail-open, ADR-0014) |
 | `/auth/*`, `/me*`, `/orders*`, `/events*` | ✅ | proxy para o serviço dono |
 
+### Rotas públicas
+
+Só estas rotas dispensam o `Authorization` (lista em `proxy.PublicRoutes`, [RFC 0002](../../docs/rfc/0002-authentication-and-authorization.md) §5.5). O `refresh` é público porque se autentica pelo refresh token no corpo; o `logout` exige o access token.
+
+| Rota | Limite |
+|---|---|
+| `POST /auth/register` | por IP, regra pública |
+| `POST /auth/login` | por IP, regra do login |
+| `POST /auth/refresh` | por IP, regra pública |
+
+Qualquer prefixo fora de `GATEWAY_ROUTES` (inclusive `/.well-known/jwks.json`) responde 404 e nunca é encaminhado.
+
 ### Rate limit
 
 | Rota | Chave | Variáveis (padrão) |
@@ -63,7 +75,7 @@ Como `SET` com o mesmo TTL é idempotente, o consumidor não precisa de tabela d
 2. Ler:
    - [RFC 0002](../../docs/rfc/0002-authentication-and-authorization.md) §5.5 (validação no gateway) e §5.8 (OWASP);
    - [padrões](../../docs/padroes.md) §4 (HTTP e formato de erro).
-3. Plano: [gateway completo](../../docs/superpowers/plans/2026-11-15-gateway-complete.md). Checagem ao vivo: `scripts/gateway-check.sh`.
+3. Design: [RFC 0010](../../docs/rfc/0010-design-do-gateway-em-go.md). Plano: [gateway](../../docs/superpowers/plans/2026-11-19-gateway.md). Checagem ao vivo: `scripts/gateway-check.sh`.
 
 ## Variáveis de ambiente
 
@@ -98,7 +110,7 @@ Sem Go instalado, os alvos rodam sozinhos no container `golang:1.25`. Para forç
 
 ## Tracing
 
-OpenTelemetry ([ADR-0012](../../docs/adr/0012-opentelemetry-collector-jaeger.md)). `OTEL_EXPORTER_OTLP_ENDPOINT` (padrão `otel-collector:4317`) envia os spans ao collector, e de lá para o Jaeger (`http://localhost:16686`). Sem a variável, nada é exportado. `OTEL_SERVICE_NAME` é opcional; o padrão é `SERVICE_NAME`.
+OpenTelemetry ([ADR-0012](../../docs/adr/0012-opentelemetry-tracing.md)). `OTEL_EXPORTER_OTLP_ENDPOINT` (padrão `otel-collector:4317`) envia os spans ao collector, e de lá para o Jaeger (`http://localhost:16686`). Sem a variável, nada é exportado. `OTEL_SERVICE_NAME` é opcional; o padrão é `SERVICE_NAME`.
 - **HTTP:** um span por requisição (`otelhttp`), exceto `/health/*`.
 - **Upstreams:** span cliente por chamada, cujo `traceparent` substitui o que o cliente mandou.
 - **Mensagens:** span `consumer` por mensagem, no trace do producer e com link para ele. Span `producer` por publicação do outbox, que propaga o `traceparent`.
