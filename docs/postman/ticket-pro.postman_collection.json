@@ -1,0 +1,4178 @@
+{
+  "info": {
+    "name": "Ticket Pro — Gateway (cenários bons e ruins + F1–F8)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Tudo passa pelo gateway (`{{baseUrl}}`, padrão http://localhost:8080). Suba a stack: `docker compose up --build -d && scripts/wait-healthy.sh`.\n\nLegenda: **⏳ = pendente** (endpoint ainda não existe; hoje responde 404, a collection já descreve o contrato-alvo). Hoje funcionam: health, register, login, /me, /me/tickets e as regras do gateway (401/404/413/429).\n\nOrdem: **00 Setup** (cria usuários A/B e descobre evento/setor) → demais pastas. As pastas de cenário (05) têm passos **manuais** (comandos `docker`/scripts) descritos em cada request; as falhas de infraestrutura não existem via HTTP.\n\nSeed: evento \"Festival de Verão 2026\", setor Pista (estoque grande) e setor F5 com 10 unidades (`f5SectorId`).\n\nRodar no terminal: `npx newman run docs/postman/ticket-pro.postman_collection.json -e docs/postman/ticket-pro.local.postman_environment.json --folder \"00 · Setup (rode primeiro)\"`."
+  },
+  "variable": [
+    {
+      "key": "userEmail",
+      "value": ""
+    },
+    {
+      "key": "userToken",
+      "value": ""
+    },
+    {
+      "key": "userRefresh",
+      "value": ""
+    },
+    {
+      "key": "otherEmail",
+      "value": ""
+    },
+    {
+      "key": "otherToken",
+      "value": ""
+    },
+    {
+      "key": "otherRefresh",
+      "value": ""
+    },
+    {
+      "key": "eventId",
+      "value": ""
+    },
+    {
+      "key": "sectorId",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "idemKey",
+      "value": ""
+    },
+    {
+      "key": "availableBefore",
+      "value": ""
+    },
+    {
+      "key": "availableAfter",
+      "value": ""
+    },
+    {
+      "key": "flowEmail",
+      "value": ""
+    },
+    {
+      "key": "flowAccess",
+      "value": ""
+    },
+    {
+      "key": "flowRefresh",
+      "value": ""
+    },
+    {
+      "key": "flowOldRefresh",
+      "value": ""
+    },
+    {
+      "key": "lastStatus",
+      "value": ""
+    },
+    {
+      "key": "lastCancelReason",
+      "value": ""
+    },
+    {
+      "key": "f3Key",
+      "value": ""
+    },
+    {
+      "key": "f5Orders",
+      "value": ""
+    },
+    {
+      "key": "f8Orders",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "00 · Setup (rode primeiro)",
+      "item": [
+        {
+          "name": "Health live",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test('up', () => pm.expect(pm.response.json().status).to.eql('up'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/ready",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "ready"
+              ]
+            },
+            "description": "Redis ou broker fora → `degraded`, ainda 200 (fail-open, ADR-0014).",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test('checks redis/broker', () => pm.expect(pm.response.json().checks).to.have.keys('redis', 'broker'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar usuário A (register + login)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "description": "Cria um usuário novo por script e guarda `userToken`/`userRefresh`. Usado por todas as pastas.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const email = 'pm-' + pm.variables.replaceIn('{{$guid}}') + '@exemplo.com';",
+                  "const pass = pm.environment.get('password');",
+                  "const post = (path, body) => new Promise((res, rej) => pm.sendRequest({ url: pm.environment.get('baseUrl') + path, method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' }, body: { mode: 'raw', raw: JSON.stringify(body) } }, (e, r) => e ? rej(e) : res(r)));",
+                  "const retry = async (path, body) => { for (let i = 0; i < 12; i++) { const r = await post(path, body); if (r.code !== 429) return r; await new Promise(s => setTimeout(s, (Number(r.headers.get('Retry-After')) || 1) * 1000)); } throw new Error('429 persistente'); };",
+                  "await retry('/auth/register', { email, password: pass, name: 'Postman user' });",
+                  "const l = (await retry('/auth/login', { email, password: pass })).json();",
+                  "pm.collectionVariables.set('userEmail', email);",
+                  "pm.collectionVariables.set('userToken', l.accessToken);",
+                  "pm.collectionVariables.set('userRefresh', l.refreshToken);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('usuário A pronto', () => pm.expect(pm.collectionVariables.get('userToken')).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar usuário B (para testes de BOLA)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "",
+                  "const email = 'pm-' + pm.variables.replaceIn('{{$guid}}') + '@exemplo.com';",
+                  "const pass = pm.environment.get('password');",
+                  "const post = (path, body) => new Promise((res, rej) => pm.sendRequest({ url: pm.environment.get('baseUrl') + path, method: 'POST',",
+                  "  header: { 'Content-Type': 'application/json' }, body: { mode: 'raw', raw: JSON.stringify(body) } }, (e, r) => e ? rej(e) : res(r)));",
+                  "const retry = async (path, body) => { for (let i = 0; i < 12; i++) { const r = await post(path, body); if (r.code !== 429) return r; await new Promise(s => setTimeout(s, (Number(r.headers.get('Retry-After')) || 1) * 1000)); } throw new Error('429 persistente'); };",
+                  "await retry('/auth/register', { email, password: pass, name: 'Postman other' });",
+                  "const l = (await retry('/auth/login', { email, password: pass })).json();",
+                  "pm.collectionVariables.set('otherEmail', email);",
+                  "pm.collectionVariables.set('otherToken', l.accessToken);",
+                  "pm.collectionVariables.set('otherRefresh', l.refreshToken);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('usuário B pronto', () => pm.expect(pm.collectionVariables.get('otherToken')).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "⏳ Descobrir evento e setor (seed)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('catálogo com itens', () => pm.expect(b.items).to.be.an('array').that.is.not.empty);",
+                  "const id = b.items[0].id;",
+                  "pm.collectionVariables.set('eventId', id);",
+                  "pm.sendRequest({ url: pm.environment.get('baseUrl') + '/events/' + id, header: { Authorization: 'Bearer ' + pm.collectionVariables.get('userToken') } }, (e, r) => {",
+                  "  const sectors = r.json().sectors;",
+                  "  const s = sectors.find(x => x.available >= 2) || sectors[0];",
+                  "  pm.collectionVariables.set('sectorId', s.id);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Cria os usuários e descobre `eventId`/`sectorId` do seed. Ordem: rode esta pasta inteira antes das demais."
+    },
+    {
+      "name": "01 · Auth",
+      "item": [
+        {
+          "name": "Caminho feliz",
+          "item": [
+            {
+              "name": "Register",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "register"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"{{password}}\",\n  \"name\": \"Auth Flow\"\n}"
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const e = 'auth-' + pm.variables.replaceIn('{{$guid}}') + '@exemplo.com'; pm.collectionVariables.set('flowEmail', e);"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                      "pm.test('userId', () => pm.expect(pm.response.json().userId).to.be.a('string'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Login",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{flowEmail}}\",\n  \"password\": \"{{password}}\"\n}"
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                      "const b = pm.response.json();",
+                      "pm.test('par de tokens', () => { pm.expect(b.accessToken).to.be.a('string'); pm.expect(b.refreshToken).to.be.a('string'); pm.expect(b.expiresIn).to.be.a('number'); });",
+                      "pm.collectionVariables.set('flowAccess', b.accessToken); pm.collectionVariables.set('flowRefresh', b.refreshToken);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Refresh (rotaciona o refresh token)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/refresh",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "refresh"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"refreshToken\": \"{{flowRefresh}}\"\n}"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n`/auth/refresh` é rota pública: autentica pelo refresh token do corpo (RFC 0002 §5.5).",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                      "const b = pm.response.json();",
+                      "pm.test('refresh novo é diferente', () => pm.expect(b.refreshToken).to.not.eql(pm.collectionVariables.get('flowRefresh')));",
+                      "pm.collectionVariables.set('flowOldRefresh', pm.collectionVariables.get('flowRefresh'));",
+                      "pm.collectionVariables.set('flowAccess', b.accessToken); pm.collectionVariables.set('flowRefresh', b.refreshToken);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Acesso com o token novo",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{flowAccess}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Logout (revoga access + refresh)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/logout",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "logout"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nPublica `TokenRevoked`; o gateway coloca o `jti` na blacklist (Redis).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{flowAccess}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 204\", () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Roda em sequência. Usa o usuário A do Setup."
+        },
+        {
+          "name": "Cenários ruins",
+          "item": [
+            {
+              "name": "Register com e-mail duplicado → 409",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "register"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{password}}\",\n  \"name\": \"Dup\"\n}"
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 409 CONFLICT\", () => { pm.response.to.have.status(409); const b = pm.response.json(); pm.expect(b.code).to.eql(\"CONFLICT\"); pm.expect(b.status).to.eql(409); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Register com corpo inválido → 400",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "register"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"nao-e-email\",\n  \"password\": \"1\",\n  \"name\": \"\"\n}"
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 400 VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.status).to.eql(400); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Register com campo desconhecido → 400",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "register"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"x-{{$guid}}@exemplo.com\",\n  \"password\": \"{{password}}\",\n  \"name\": \"X\",\n  \"role\": \"admin\"\n}"
+                },
+                "description": "Campos desconhecidos são rejeitados (padrões §4).",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 400 VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.status).to.eql(400); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Login com senha errada → 401",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"senha errada\"\n}"
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 401\", () => pm.response.to.have.status(401));",
+                      "pm.test('erro genérico', () => pm.expect(pm.response.json().code).to.be.oneOf(['invalid_credentials', 'UNAUTHENTICATED']));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Login com e-mail inexistente → 401 (mesma resposta)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/login",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "login"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"ninguem-{{$guid}}@exemplo.com\",\n  \"password\": \"qualquer coisa longa\"\n}"
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 401\", () => pm.response.to.have.status(401));",
+                      "pm.test('não revela se o e-mail existe', () => pm.expect(pm.response.json().code).to.be.oneOf(['invalid_credentials', 'UNAUTHENTICATED']));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Refresh com token inventado → 401",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/refresh",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "refresh"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"refreshToken\": \"nao-existe\"\n}"
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 401\", () => pm.response.to.have.status(401));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Reuso de refresh já rotacionado → 401 (revoga a família)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/refresh",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "refresh"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"refreshToken\": \"{{flowOldRefresh}}\"\n}"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRode depois de \"Refresh\" do caminho feliz. Detecção de reuso revoga a família inteira (RFC 0002 §5.1).",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 401\", () => pm.response.to.have.status(401));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Refresh da família revogada também falha → 401",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/refresh",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "refresh"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"refreshToken\": \"{{flowRefresh}}\"\n}"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nDepende do reuso acima.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 401\", () => pm.response.to.have.status(401));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Token revogado após logout → 401",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRode depois do Logout. Depende do `TokenRevoked` ter chegado ao gateway (assíncrono, ~1 s).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{flowAccess}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 401\", () => pm.response.to.have.status(401));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Sem Authorization → 401",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 401 UNAUTHENTICATED\", () => { pm.response.to.have.status(401); const b = pm.response.json(); pm.expect(b.code).to.eql(\"UNAUTHENTICATED\"); pm.expect(b.status).to.eql(401); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Token lixo → 401",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "isto.nao.e.jwt",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 401 UNAUTHENTICATED\", () => { pm.response.to.have.status(401); const b = pm.response.json(); pm.expect(b.code).to.eql(\"UNAUTHENTICATED\"); pm.expect(b.status).to.eql(401); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "JWT com assinatura inválida → 401",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImZha2UifQ.eyJzdWIiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJleHAiOjQxMDI0NDQ4MDB9.AAAA",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 401 UNAUTHENTICATED\", () => { pm.response.to.have.status(401); const b = pm.response.json(); pm.expect(b.code).to.eql(\"UNAUTHENTICATED\"); pm.expect(b.status).to.eql(401); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Logout sem token → 401",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/logout",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "logout"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 401\", () => pm.response.to.have.status(401));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "JWKS não é roteado para fora → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/.well-known/jwks.json",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    ".well-known",
+                    "jwks.json"
+                  ]
+                },
+                "description": "Rota interna: o gateway só serve prefixos de `GATEWAY_ROUTES`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 404\", () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Rota desconhecida → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/admin",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 404\", () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Corpo acima do limite → 413",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/auth/register",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "register"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{{bigBody}}"
+                },
+                "description": "`GATEWAY_MAX_BODY_BYTES` = 65536.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.variables.set('bigBody', JSON.stringify({ email: 'big@exemplo.com', password: 'x', name: 'x'.repeat(70000) }));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 413 PAYLOAD_TOO_LARGE\", () => { pm.response.to.have.status(413); const b = pm.response.json(); pm.expect(b.code).to.eql(\"PAYLOAD_TOO_LARGE\"); pm.expect(b.status).to.eql(413); });"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 · Catálogo (inventory)",
+      "item": [
+        {
+          "name": "⏳ Listar eventos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test('paginação por cursor', () => { const b = pm.response.json(); pm.expect(b.items).to.be.an('array'); pm.expect(b).to.have.property('nextCursor'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "⏳ Listar eventos com limit=1",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events?limit=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test('no máximo 1 item', () => pm.expect(pm.response.json().items.length).to.be.at.most(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "⏳ Detalhe do evento (setores + available)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{eventId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{eventId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test('setores com available', () => { const s = pm.response.json().sectors; pm.expect(s).to.be.an('array').that.is.not.empty; s.forEach(x => pm.expect(x.available).to.be.a('number')); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "⏳ Evento inexistente → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events/00000000-0000-7000-8000-000000000000",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "00000000-0000-7000-8000-000000000000"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"problem+json 404 NOT_FOUND\", () => { pm.response.to.have.status(404); const b = pm.response.json(); pm.expect(b.code).to.eql(\"NOT_FOUND\"); pm.expect(b.status).to.eql(404); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "⏳ Id de evento inválido → 400/404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events/nao-e-uuid",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "nao-e-uuid"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejeita id inválido', () => pm.expect(pm.response.code).to.be.oneOf([400, 404]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "⏳ Catálogo sem token → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"problem+json 401 UNAUTHENTICATED\", () => { pm.response.to.have.status(401); const b = pm.response.json(); pm.expect(b.code).to.eql(\"UNAUTHENTICATED\"); pm.expect(b.status).to.eql(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 · Pedidos (order-service, saga)",
+      "item": [
+        {
+          "name": "Caminho feliz",
+          "item": [
+            {
+              "name": "⏳ Estoque antes",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/events/{{eventId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "events",
+                    "{{eventId}}"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nGuarda o `available` do setor.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                      "const s = pm.response.json().sectors.find(x => x.id === pm.collectionVariables.get('sectorId'));",
+                      "pm.collectionVariables.set('availableBefore', s.available);",
+                      "console.log('availableBefore =', s.available);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ POST /orders → 202 + Location",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{idemKey}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nAPI assíncrona (R3): responde 202 com `orderId`; o status final vem depois.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('idemKey', pm.variables.replaceIn('{{$guid}}'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 202\", () => pm.response.to.have.status(202));",
+                      "pm.test('Location aponta para o pedido', () => { const b = pm.response.json(); pm.expect(pm.response.headers.get('Location')).to.eql('/orders/' + b.orderId); pm.expect(b.status).to.eql('PENDING'); });",
+                      "pm.collectionVariables.set('orderId', pm.response.json().orderId);",
+                      ""
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ GET /orders/{id} até estado final",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/{{orderId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "{{orderId}}"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const FINAL = ['CONFIRMED', 'CANCELLED'];",
+                      "const b = pm.response.json();",
+                      "const tries = Number(pm.collectionVariables.get('pollTries') || 0) + 1;",
+                      "if (!FINAL.includes(b.status) && tries < 60) {",
+                      "  pm.collectionVariables.set('pollTries', tries);",
+                      "  setTimeout(() => postman.setNextRequest(pm.info.requestName), 500);",
+                      "} else {",
+                      "  pm.collectionVariables.unset('pollTries');",
+                      "  pm.collectionVariables.set('lastStatus', b.status);",
+                      "  pm.collectionVariables.set('lastCancelReason', b.cancelReason || '');",
+                      "  pm.test('pedido chegou a um estado final', () => pm.expect(FINAL).to.include(b.status));",
+                      "  pm.test('confirmado ou cancelado por falha simulada', () => {",
+                      "    if (b.status === 'CANCELLED') pm.expect(b.cancelReason).to.eql('PAYMENT_FAILED');",
+                      "  });",
+                      "  if (b.status === 'CANCELLED') console.warn('PAYMENT_FAILURE_RATE padrão = 0.1: pedido cancelado por falha simulada. Rode de novo.');",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Mesma Idempotency-Key → 200 com o mesmo pedido",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{idemKey}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nR1/idempotência de criação: sem segundo pedido, sem segunda reserva.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                      "pm.test('mesmo orderId', () => pm.expect(pm.response.json().orderId).to.eql(pm.collectionVariables.get('orderId')));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Listar meus pedidos",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders?limit=20",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                      "pm.test('contém o pedido', () => pm.expect(pm.response.json().items.map(i => i.id || i.orderId)).to.include(pm.collectionVariables.get('orderId')));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Meus ingressos (read model)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/me/tickets?limit=50",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "me",
+                    "tickets"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nCQRS: `TicketsIssued` tem dois consumidores (user → este read model; notification → recibo no S3).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                      "pm.test('ingressos do pedido (se CONFIRMED; consistência eventual)', () => {",
+                      "  if (pm.collectionVariables.get('lastStatus') !== 'CONFIRMED') return;",
+                      "  const n = pm.response.json().items.filter(i => i.orderId === pm.collectionVariables.get('orderId')).length;",
+                      "  pm.expect(n, 'pode levar ~1 s; envie de novo').to.eql(2);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Estoque depois",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/events/{{eventId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "events",
+                    "{{eventId}}"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nConfirmado: `availableBefore - 2`. Cancelado: igual ao antes.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                      "const s = pm.response.json().sectors.find(x => x.id === pm.collectionVariables.get('sectorId'));",
+                      "pm.collectionVariables.set('availableAfter', s.available);",
+                      "console.log('availableAfter =', s.available);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Rode em sequência (Runner). Compra de 2 ingressos."
+        },
+        {
+          "name": "Cenários ruins",
+          "item": [
+            {
+              "name": "⏳ Sem Idempotency-Key → 400",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nHeader obrigatório.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 400 VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.status).to.eql(400); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Idempotency-Key não-UUID → 400",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "nao-e-uuid"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 400 VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.status).to.eql(400); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ quantity = 0 → 400",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 400 VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.status).to.eql(400); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ quantity = 7 (> ORDER_MAX_QUANTITY=6) → 400",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 7\n}"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 400 VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.status).to.eql(400); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ quantity como string → 400",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": \"dois\"\n}"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 400 VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.status).to.eql(400); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Campo extra userId no corpo → 400",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 1,\n  \"userId\": \"11111111-1111-7111-8111-111111111111\"\n}"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nIdentidade só pelo header injetado pelo gateway (BOLA).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 400 VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.status).to.eql(400); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ eventId inválido → 400",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"x\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 1\n}"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 400 VALIDATION_ERROR\", () => { pm.response.to.have.status(400); const b = pm.response.json(); pm.expect(b.code).to.eql(\"VALIDATION_ERROR\"); pm.expect(b.status).to.eql(400); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Sem token → 401",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 401 UNAUTHENTICATED\", () => { pm.response.to.have.status(401); const b = pm.response.json(); pm.expect(b.code).to.eql(\"UNAUTHENTICATED\"); pm.expect(b.status).to.eql(401); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Falsificar X-User-Id no cliente (ignorado) → pedido é do dono do token",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "X-User-Id",
+                    "value": "11111111-1111-7111-8111-111111111111"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 1\n}"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nO gateway remove `X-User-Id` do cliente e injeta o valor do JWT (RFC 0002).",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 202\", () => pm.response.to.have.status(202));",
+                      "const id = pm.response.json().orderId;",
+                      "pm.sendRequest({ url: pm.environment.get('baseUrl') + '/orders/' + id, header: { Authorization: 'Bearer ' + pm.collectionVariables.get('userToken') } },",
+                      "  (e, r) => pm.test('o pedido pertence ao usuário do token', () => pm.expect(r.code).to.eql(200)));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ BOLA: usuário B lê pedido do A → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/{{orderId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "{{orderId}}"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nNão revela a existência do pedido. Precisa de um `orderId` do A.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{otherToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 404 NOT_FOUND\", () => { pm.response.to.have.status(404); const b = pm.response.json(); pm.expect(b.code).to.eql(\"NOT_FOUND\"); pm.expect(b.status).to.eql(404); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Pedido inexistente → 404",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/00000000-0000-7000-8000-000000000000",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "00000000-0000-7000-8000-000000000000"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"problem+json 404 NOT_FOUND\", () => { pm.response.to.have.status(404); const b = pm.response.json(); pm.expect(b.code).to.eql(\"NOT_FOUND\"); pm.expect(b.status).to.eql(404); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ GET /orders com limit=500 → 400 ou limitado a 50",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders?limit=500",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('limit ≤ 50', () => { if (pm.response.code === 200) pm.expect(pm.response.json().items.length).to.be.at.most(50); else pm.expect(pm.response.code).to.eql(400); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ Setor de outro evento / inexistente → rejeitado",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"00000000-0000-7000-8000-000000000000\",\n  \"quantity\": 1\n}"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nSe o order aceitar (202), a saga cancela por falta de estoque; rode \"GET /orders/{id}\" para ver `CANCELLED`.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('400/404 na entrada ou CANCELLED depois', () => pm.expect(pm.response.code).to.be.oneOf([202, 400, 404]));",
+                      "if (pm.response.code === 202) { pm.collectionVariables.set('orderId', pm.response.json().orderId); }"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Rate limit (gateway)",
+          "item": [
+            {
+              "name": "Login: 8 tentativas seguidas → 429 + Retry-After",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "`AUTH_LOGIN_RPS=1`, `AUTH_LOGIN_BURST=5` por IP. Espere ~10 s antes de rodar outras pastas (o bucket recarrega).",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const url = pm.environment.get('baseUrl') + '/auth/login';",
+                      "const hit = () => new Promise(res => pm.sendRequest({ url, method: 'POST', header: { 'Content-Type': 'application/json' }, body: { mode: 'raw', raw: JSON.stringify({ email: 'rl@exemplo.com', password: 'errada errada' }) } }, (e, r) => res(r)));",
+                      "const rs = await Promise.all(Array.from({ length: 8 }, hit));",
+                      "const codes = rs.map(r => r.code);",
+                      "console.log(codes);",
+                      "pm.test('algum 429 (AUTH_LOGIN_BURST=5)', () => pm.expect(codes).to.include(429));",
+                      "const limited = rs.find(r => r.code === 429);",
+                      "pm.test('Retry-After presente', () => pm.expect(limited.headers.get('Retry-After')).to.be.ok);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 · Usuário (user-service)",
+      "item": [
+        {
+          "name": "GET /me",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test('perfil', () => pm.expect(pm.response.json()).to.have.property('email'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /me/tickets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me/tickets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "tickets"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test('items', () => pm.expect(pm.response.json().items).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /me sem token → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"problem+json 401 UNAUTHENTICATED\", () => { pm.response.to.have.status(401); const b = pm.response.json(); pm.expect(b.code).to.eql(\"UNAUTHENTICATED\"); pm.expect(b.status).to.eql(401); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Usuário B não vê os ingressos do A",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/me/tickets",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "tickets"
+              ]
+            },
+            "description": "Não existe rota com `userId` na URL: só `X-User-Id`.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{otherToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test('lista vazia', () => pm.expect(pm.response.json().items).to.be.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tentar GET /users/{id} → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/users/11111111-1111-7111-8111-111111111111",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "11111111-1111-7111-8111-111111111111"
+              ]
+            },
+            "description": "Prefixo `/users` não é roteado.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 · Cenários de falha da demo (F1–F8)",
+      "item": [
+        {
+          "name": "F1 · Compensação (PAYMENT_FAILURE_RATE=1)",
+          "item": [
+            {
+              "name": "⏳ 1) Recriar payment com falha 100%",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nPAYMENT_FAILURE_RATE=1 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 2) Estoque antes",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/events/{{eventId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "events",
+                    "{{eventId}}"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                      "const s = pm.response.json().sectors.find(x => x.id === pm.collectionVariables.get('sectorId'));",
+                      "pm.collectionVariables.set('availableBefore', s.available);",
+                      "console.log('availableBefore =', s.available);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 3) Criar pedido (qty 2)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 202\", () => pm.response.to.have.status(202));",
+                      "pm.test('Location aponta para o pedido', () => { const b = pm.response.json(); pm.expect(pm.response.headers.get('Location')).to.eql('/orders/' + b.orderId); pm.expect(b.status).to.eql('PENDING'); });",
+                      "pm.collectionVariables.set('orderId', pm.response.json().orderId);",
+                      ""
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 4) Pedido → CANCELLED(PAYMENT_FAILED)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/{{orderId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "{{orderId}}"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const FINAL = ['CONFIRMED', 'CANCELLED'];",
+                      "const b = pm.response.json();",
+                      "const tries = Number(pm.collectionVariables.get('pollTries') || 0) + 1;",
+                      "if (!FINAL.includes(b.status) && tries < 60) {",
+                      "  pm.collectionVariables.set('pollTries', tries);",
+                      "  setTimeout(() => postman.setNextRequest(pm.info.requestName), 500);",
+                      "} else {",
+                      "  pm.collectionVariables.unset('pollTries');",
+                      "  pm.collectionVariables.set('lastStatus', b.status);",
+                      "  pm.collectionVariables.set('lastCancelReason', b.cancelReason || '');",
+                      "  pm.test('pedido chegou a um estado final', () => pm.expect(FINAL).to.include(b.status));",
+                      "  pm.test('cancelado por PAYMENT_FAILED', () => { pm.expect(b.status).to.eql('CANCELLED'); pm.expect(b.cancelReason).to.eql('PAYMENT_FAILED'); });",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 5) Estoque devolvido",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/events/{{eventId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "events",
+                    "{{eventId}}"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nA liberação é assíncrona (`OrderCancelled` → inventory). Se falhar, espere 1–2 s e envie de novo.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                      "const s = pm.response.json().sectors.find(x => x.id === pm.collectionVariables.get('sectorId'));",
+                      "pm.test('available voltou ao valor de antes (compensação)', () => pm.expect(s.available).to.eql(pm.collectionVariables.get('availableBefore')));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 6) Restaurar payment",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Passos desfeitos, estoque devolvido, cliente notificado. Script equivalente: `scripts/f1-compensation.sh`."
+        },
+        {
+          "name": "F2 · Serviço morre no meio (docker kill)",
+          "item": [
+            {
+              "name": "⏳ 1) Criar pedido",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 202\", () => pm.response.to.have.status(202));",
+                      "pm.test('Location aponta para o pedido', () => { const b = pm.response.json(); pm.expect(pm.response.headers.get('Location')).to.eql('/orders/' + b.orderId); pm.expect(b.status).to.eql('PENDING'); });",
+                      "pm.collectionVariables.set('orderId', pm.response.json().orderId);",
+                      ""
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 2) Matar uma réplica logo depois",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker kill $(docker compose ps -q inventory-service | head -1)\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 3) Pedido ainda chega ao final",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/{{orderId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "{{orderId}}"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nA outra réplica assume após o visibility timeout.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const FINAL = ['CONFIRMED', 'CANCELLED'];",
+                      "const b = pm.response.json();",
+                      "const tries = Number(pm.collectionVariables.get('pollTries') || 0) + 1;",
+                      "if (!FINAL.includes(b.status) && tries < 60) {",
+                      "  pm.collectionVariables.set('pollTries', tries);",
+                      "  setTimeout(() => postman.setNextRequest(pm.info.requestName), 500);",
+                      "} else {",
+                      "  pm.collectionVariables.unset('pollTries');",
+                      "  pm.collectionVariables.set('lastStatus', b.status);",
+                      "  pm.collectionVariables.set('lastCancelReason', b.cancelReason || '');",
+                      "  pm.test('pedido chegou a um estado final', () => pm.expect(FINAL).to.include(b.status));",
+                      "  pm.test('final sem duplicar efeito', () => pm.expect(['CONFIRMED','CANCELLED']).to.include(b.status));",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 4) Conferir exatamente uma reserva",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker compose exec -T inventory-db psql -U inventory_owner -d inventory -tAc \"SELECT count(*) FROM reservations WHERE order_id='<orderId>'\"   # = 1\ndocker compose up -d --no-deps inventory-service\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Efeito aplicado uma vez. Script: `scripts/f2-consumer-kill.sh`."
+        },
+        {
+          "name": "F3 · Mensagem duplicada",
+          "item": [
+            {
+              "name": "⏳ 1) Pedido com chave fixa",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{f3Key}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('f3Key', pm.variables.replaceIn('{{$guid}}'));"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 202\", () => pm.response.to.have.status(202));",
+                      "pm.test('Location aponta para o pedido', () => { const b = pm.response.json(); pm.expect(pm.response.headers.get('Location')).to.eql('/orders/' + b.orderId); pm.expect(b.status).to.eql('PENDING'); });",
+                      "pm.collectionVariables.set('orderId', pm.response.json().orderId);",
+                      ""
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 2) Repetir a mesma chave 5x → sempre o mesmo pedido",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{f3Key}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const orderId = pm.collectionVariables.get('orderId');",
+                      "const hit = () => new Promise(res => pm.sendRequest({ url: pm.environment.get('baseUrl') + '/orders', method: 'POST', header: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pm.collectionVariables.get('userToken'), 'Idempotency-Key': pm.collectionVariables.get('f3Key') },",
+                      "  body: { mode: 'raw', raw: JSON.stringify({ eventId: pm.collectionVariables.get('eventId'), sectorId: pm.collectionVariables.get('sectorId'), quantity: 2 }) } }, (e, r) => res(r)));",
+                      "const rs = [];",
+                      "for (let i = 0; i < 4; i++) rs.push(await hit());",
+                      "pm.test('5 chamadas, 1 pedido', () => { [pm.response, ...rs].forEach(r => { pm.expect(r.code).to.eql(200); pm.expect(r.json().orderId).to.eql(orderId); }); });"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 3) Duplicata no broker (5x o mesmo messageId)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/f3-duplicate.sh\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Mesmo `messageId` 5x → um efeito. Via HTTP: mesma Idempotency-Key 5x. Via SNS: `scripts/f3-duplicate.sh`."
+        },
+        {
+          "name": "F4 · Mensagem venenosa → DLQ",
+          "item": [
+            {
+              "name": "⏳ 1) Publicar OrderCreated inválido",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/f4-poison.sh\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 2) Pedido válido logo depois",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 202\", () => pm.response.to.have.status(202));",
+                      "pm.test('Location aponta para o pedido', () => { const b = pm.response.json(); pm.expect(pm.response.headers.get('Location')).to.eql('/orders/' + b.orderId); pm.expect(b.status).to.eql('PENDING'); });",
+                      "pm.collectionVariables.set('orderId', pm.response.json().orderId);",
+                      ""
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 3) Pedido válido segue normalmente",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/{{orderId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "{{orderId}}"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const FINAL = ['CONFIRMED', 'CANCELLED'];",
+                      "const b = pm.response.json();",
+                      "const tries = Number(pm.collectionVariables.get('pollTries') || 0) + 1;",
+                      "if (!FINAL.includes(b.status) && tries < 60) {",
+                      "  pm.collectionVariables.set('pollTries', tries);",
+                      "  setTimeout(() => postman.setNextRequest(pm.info.requestName), 500);",
+                      "} else {",
+                      "  pm.collectionVariables.unset('pollTries');",
+                      "  pm.collectionVariables.set('lastStatus', b.status);",
+                      "  pm.collectionVariables.set('lastCancelReason', b.cancelReason || '');",
+                      "  pm.test('pedido chegou a um estado final', () => pm.expect(FINAL).to.include(b.status));",
+                      "  pm.test('fila não travou', () => pm.expect(['CONFIRMED','CANCELLED']).to.include(b.status));",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 4) Inspecionar a DLQ",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/dlq.sh\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Payload inválido fora do HTTP: `scripts/f4-poison.sh` e `scripts/dlq.sh`. Aqui, prova de que a fila continua fluindo."
+        },
+        {
+          "name": "F5 · Corrida pelo recurso (100 req / 10 unidades)",
+          "item": [
+            {
+              "name": "⏳ 0) Resetar o setor F5 e payment sem falha",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nPAYMENT_FAILURE_RATE=0 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n# setor F5: 10 unidades (id 0193a6f0-4444-7000-8000-0000000000f5), veja scripts/f5-race.sh\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 1) Disparar 100 pedidos concorrentes (20 usuários × 5)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nSimula a rajada com `pm.sendRequest` assíncrono (concorrência real no cliente). Para o teste canônico, use `scripts/f5-race.sh`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.collectionVariables.set('f5Sector', pm.environment.get('f5SectorId'));",
+                      "pm.collectionVariables.set('f5Orders', '[]');"
+                    ]
+                  }
+                },
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const base = pm.environment.get('baseUrl'), pass = pm.environment.get('password');",
+                      "const post = (path, body, headers = {}) => new Promise(res => pm.sendRequest({ url: base + path, method: 'POST', header: { 'Content-Type': 'application/json', ...headers }, body: { mode: 'raw', raw: JSON.stringify(body) } }, (e, r) => res(r)));",
+                      "const retry = async (path, body, headers) => { for (let i = 0; i < 15; i++) { const r = await post(path, body, headers); if (r.code !== 429) return r; await new Promise(s => setTimeout(s, (Number(r.headers.get('Retry-After')) || 1) * 1000)); } return null; };",
+                      "const eventId = pm.collectionVariables.get('eventId'), sectorId = pm.environment.get('f5SectorId');",
+                      "const tokens = [];",
+                      "for (let u = 0; u < 20; u++) {",
+                      "  const email = 'f5-' + Date.now() + '-' + u + '@exemplo.com';",
+                      "  await retry('/auth/register', { email, password: pass, name: 'F5 ' + u });",
+                      "  const l = await retry('/auth/login', { email, password: pass });",
+                      "  tokens.push(l.json().accessToken);",
+                      "}",
+                      "const t0 = Date.now();",
+                      "const ids = [];",
+                      "await Promise.all(tokens.flatMap(tk => Array.from({ length: 5 }, async () => {",
+                      "  const r = await retry('/orders', { eventId, sectorId, quantity: 1 }, { Authorization: 'Bearer ' + tk, 'Idempotency-Key': pm.variables.replaceIn('{{$guid}}') });",
+                      "  if (r && r.code === 202) ids.push({ id: r.json().orderId, tk });",
+                      "})));",
+                      "pm.test('100 pedidos aceitos (202) em ' + (Date.now() - t0) + ' ms', () => pm.expect(ids.length).to.eql(100));",
+                      "pm.collectionVariables.set('f5Orders', JSON.stringify(ids));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 2) Contar resultados",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nPode levar até 60 s.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const base = pm.environment.get('baseUrl');",
+                      "const ids = JSON.parse(pm.collectionVariables.get('f5Orders') || '[]');",
+                      "const get = ({ id, tk }) => new Promise(res => pm.sendRequest({ url: base + '/orders/' + id, header: { Authorization: 'Bearer ' + tk } }, (e, r) => res(r.json())));",
+                      "let rs = [];",
+                      "for (let i = 0; i < 60; i++) { rs = await Promise.all(ids.map(get)); if (rs.every(o => ['CONFIRMED', 'CANCELLED'].includes(o.status))) break; await new Promise(s => setTimeout(s, 1000)); }",
+                      "const ok = rs.filter(o => o.status === 'CONFIRMED').length;",
+                      "const oos = rs.filter(o => o.status === 'CANCELLED' && o.cancelReason === 'OUT_OF_STOCK').length;",
+                      "console.log({ confirmed: ok, outOfStock: oos });",
+                      "pm.test('exatamente 10 CONFIRMED (R2: zero venda dupla)', () => pm.expect(ok).to.eql(10));",
+                      "pm.test('90 CANCELLED(OUT_OF_STOCK)', () => pm.expect(oos).to.eql(90));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Exatamente 10 sucessos, 90 `CANCELLED(OUT_OF_STOCK)`. Rode **uma vez** por reset do setor. Script: `scripts/f5-race.sh`."
+        },
+        {
+          "name": "F6 · Broker fora do ar (30 s)",
+          "item": [
+            {
+              "name": "⏳ 1) Pausar o MiniStack",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker pause $(docker compose ps -q ministack)\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 2) Criar pedido com o broker fora (continua 202)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nO pedido nasce `PENDING` e o evento fica na `outbox`.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 202\", () => pm.response.to.have.status(202));",
+                      "pm.test('Location aponta para o pedido', () => { const b = pm.response.json(); pm.expect(pm.response.headers.get('Location')).to.eql('/orders/' + b.orderId); pm.expect(b.status).to.eql('PENDING'); });",
+                      "pm.collectionVariables.set('orderId', pm.response.json().orderId);",
+                      ""
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 3) Pedido ainda PENDING",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/{{orderId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "{{orderId}}"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                      "pm.test('PENDING enquanto o broker está fora', () => pm.expect(pm.response.json().status).to.eql('PENDING'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 4) Esperar 30 s e despausar",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nsleep 30 && docker unpause $(docker compose ps -q ministack)\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 5) Saga completa sozinha",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/{{orderId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "{{orderId}}"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const FINAL = ['CONFIRMED', 'CANCELLED'];",
+                      "const b = pm.response.json();",
+                      "const tries = Number(pm.collectionVariables.get('pollTries') || 0) + 1;",
+                      "if (!FINAL.includes(b.status) && tries < 60) {",
+                      "  pm.collectionVariables.set('pollTries', tries);",
+                      "  setTimeout(() => postman.setNextRequest(pm.info.requestName), 500);",
+                      "} else {",
+                      "  pm.collectionVariables.unset('pollTries');",
+                      "  pm.collectionVariables.set('lastStatus', b.status);",
+                      "  pm.collectionVariables.set('lastCancelReason', b.cancelReason || '');",
+                      "  pm.test('pedido chegou a um estado final', () => pm.expect(FINAL).to.include(b.status));",
+                      "  pm.test('sem intervenção manual', () => pm.expect(['CONFIRMED','CANCELLED']).to.include(b.status));",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Reconexão sozinha, outbox drena, nada perdido. Script: `scripts/f6-broker-down.sh`."
+        },
+        {
+          "name": "F7 · Resposta tardia (latência > timeout)",
+          "item": [
+            {
+              "name": "⏳ 1) Latência 20 s (> ORDER_PAYMENT_TIMEOUT_MS=15000)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nPAYMENT_LATENCY_MS=20000 PAYMENT_PROVIDER_TIMEOUT_MS=30000 PAYMENT_FAILURE_RATE=0 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 2) Criar pedido",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/orders",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"status 202\", () => pm.response.to.have.status(202));",
+                      "pm.test('Location aponta para o pedido', () => { const b = pm.response.json(); pm.expect(pm.response.headers.get('Location')).to.eql('/orders/' + b.orderId); pm.expect(b.status).to.eql('PENDING'); });",
+                      "pm.collectionVariables.set('orderId', pm.response.json().orderId);",
+                      ""
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 3) Pedido → CANCELLED(PAYMENT_TIMEOUT)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/orders/{{orderId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "{{orderId}}"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nLeva ~15 s. O estado não muda quando a aprovação tardia chega: vira `RefundRequested` → `PaymentRefunded`.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{userToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const FINAL = ['CONFIRMED', 'CANCELLED'];",
+                      "const b = pm.response.json();",
+                      "const tries = Number(pm.collectionVariables.get('pollTries') || 0) + 1;",
+                      "if (!FINAL.includes(b.status) && tries < 60) {",
+                      "  pm.collectionVariables.set('pollTries', tries);",
+                      "  setTimeout(() => postman.setNextRequest(pm.info.requestName), 500);",
+                      "} else {",
+                      "  pm.collectionVariables.unset('pollTries');",
+                      "  pm.collectionVariables.set('lastStatus', b.status);",
+                      "  pm.collectionVariables.set('lastCancelReason', b.cancelReason || '');",
+                      "  pm.test('pedido chegou a um estado final', () => pm.expect(FINAL).to.include(b.status));",
+                      "  pm.test('timeout do pagamento', () => { pm.expect(b.status).to.eql('CANCELLED'); pm.expect(b.cancelReason).to.eql('PAYMENT_TIMEOUT'); });",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 4) Conferir o reembolso (~10 s depois)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker compose exec -T payments-db psql -U payments_owner -d payments -tAc \"SELECT status FROM payments WHERE order_id='<orderId>'\"   # REFUNDED\ndocker compose up -d --no-deps payment-service\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "`CANCELLED(PAYMENT_TIMEOUT)` e depois reembolso do pagamento tardio. Script: `scripts/f7-late-response.sh`."
+        },
+        {
+          "name": "F8 · Escala horizontal (3 réplicas)",
+          "item": [
+            {
+              "name": "⏳ 1) Subir 3 réplicas do payment",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker compose up -d --no-deps --scale payment-service=3 payment-service\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 2) 12 pedidos em rajada",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n`ORDERS_RPS=2` limita por usuário: o script espera o 429. Para rajada real use `scripts/f8-scale.sh`.",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const base = pm.environment.get('baseUrl');",
+                      "const tk = pm.collectionVariables.get('userToken');",
+                      "const ids = [];",
+                      "for (let i = 0; i < 12; i++) {",
+                      "  const r = await new Promise(res => pm.sendRequest({ url: base + '/orders', method: 'POST', header: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk, 'Idempotency-Key': pm.variables.replaceIn('{{$guid}}') },",
+                      "    body: { mode: 'raw', raw: JSON.stringify({ eventId: pm.collectionVariables.get('eventId'), sectorId: pm.collectionVariables.get('sectorId'), quantity: 1 }) } }, (e, r) => res(r)));",
+                      "  if (r.code === 429) { await new Promise(s => setTimeout(s, 1000)); i--; continue; }",
+                      "  if (r.code === 202) ids.push(r.json().orderId);",
+                      "}",
+                      "pm.collectionVariables.set('f8Orders', JSON.stringify(ids));",
+                      "pm.test('12 pedidos aceitos', () => pm.expect(ids.length).to.eql(12));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 3) Todos chegam a estado final",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "auth": {
+                  "type": "noauth"
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "",
+                      "const base = pm.environment.get('baseUrl'), tk = pm.collectionVariables.get('userToken');",
+                      "const ids = JSON.parse(pm.collectionVariables.get('f8Orders') || '[]');",
+                      "const get = (id) => new Promise(res => pm.sendRequest({ url: base + '/orders/' + id, header: { Authorization: 'Bearer ' + tk } }, (e, r) => res(r.json())));",
+                      "let rs = [];",
+                      "for (let i = 0; i < 60; i++) { rs = await Promise.all(ids.map(get)); if (rs.every(o => ['CONFIRMED', 'CANCELLED'].includes(o.status))) break; await new Promise(s => setTimeout(s, 1000)); }",
+                      "pm.test('todos finais', () => pm.expect(rs.every(o => ['CONFIRMED', 'CANCELLED'].includes(o.status))).to.be.true);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "⏳ 4) Conferir distribuição e unicidade",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/health/live",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "health",
+                    "live"
+                  ]
+                },
+                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/check-replicas.sh\ndocker compose up -d --no-deps --scale payment-service=2 payment-service\n```",
+                "auth": {
+                  "type": "noauth"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "description": "Carga dividida, sem cobrança dupla. Script: `scripts/f8-scale.sh`."
+        }
+      ]
+    },
+    {
+      "name": "06 · Bônus (observabilidade, autoscale, versionamento)",
+      "item": [
+        {
+          "name": "Trace: gerar uma operação com X-Correlation-Id próprio",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-Id",
+                "value": "cliente-forjado"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me"
+              ]
+            },
+            "description": "Depois, abra o Jaeger em http://localhost:16686 e procure o trace de `gateway` → `user-service`.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{userToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test('o cliente não impõe o correlationId (gateway o substitui)', () => pm.expect(pm.response.headers.get('X-Correlation-Id') || '').to.not.eql('cliente-forjado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "⏳ Autoscale (consumidor conforme a fila)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/demo-autoscale.sh\n```",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "⏳ Versionamento de eventos (v1 + v2 convivendo)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/demo-versioning.sh\n```",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
