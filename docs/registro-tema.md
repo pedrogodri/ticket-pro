@@ -8,21 +8,21 @@
 
 | Integrante | Linguagem principal | Responsabilidade |
 |---|---|---|
-| Pedro | Go | gateway, inventory-service, notification-service |
-| Felipe | Java | auth-service |
+| Pedro | Go | gateway, notification-service, autoscaler |
+| Felipe | Java | auth-service, inventory-service |
 | Gabriel | C# | payment-service |
 | Yasmin | C# | user-service |
-| Matheus | TypeScript (apoio geral) | order-service, apoio aos demais |
+| Matheus | Java (apoio geral) | order-service, apoio aos demais |
 
-## Serviços e linguagens (4 runtimes distintos)
+## Serviços e linguagens (3 runtimes distintos)
 
 | Serviço | Linguagem | Banco próprio |
 |---|---|---|
 | gateway | Go | — (sem banco; Redis para rate limit) |
 | auth-service | Java | PostgreSQL `auth` + Redis (blacklist de `jti`) |
 | user-service | C# | PostgreSQL `users` |
-| order-service | TypeScript (Node.js) | PostgreSQL `orders` |
-| inventory-service | Go | PostgreSQL `inventory` |
+| order-service | Java | PostgreSQL `orders` |
+| inventory-service | Java | PostgreSQL `inventory` |
 | payment-service | C# | PostgreSQL `payments` |
 | notification-service | Go | PostgreSQL `notifications` + bucket S3 |
 

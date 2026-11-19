@@ -9,7 +9,7 @@ Princípio: primeiro o **núcleo avaliado** (R1–R6, F1–F8 e os 3 elementos o
 | Fase | Datas | Entrega | Checkpoint |
 |---|---|---|---|
 | **F0** Fundação | qui 12 – sex 13/11 | Docs aprovados, spikes no MiniStack, esqueleto do repo e infra | `docker compose up` sobe MiniStack + infra-init (Terraform) + Jaeger; spikes respondidos |
-| **F1** Plataforma | sáb 14 – seg 16/11 | Libs `shared/go`, `shared/dotnet`, equivalentes Java/TS, sync, esqueleto dos 8 serviços | Todos os serviços `healthy`; teste de R1 e R6 verde nas 4 linguagens |
+| **F1** Plataforma | sáb 14 – seg 16/11 | Libs `shared/go`, `shared/dotnet`, equivalente Java, sync, esqueleto dos 8 serviços | Todos os serviços `healthy`; teste de R1 e R6 verde nas 3 linguagens |
 | **F2** Caminho feliz | ter 17 – qui 19/11 | Cadastro, login, compra ponta a ponta, ingressos, comprovante S3 | Script `happy-path.sh` verde; R2, R3, R4, R5 verdes |
 | **F3** Falhas | sex 20 – sáb 21/11 | Compensações, deadline, estorno, expiração, DLQ, revogação, scripts F1–F8 | `scripts/f1..f8` todos com exit 0 |
 | **F4** Bônus | dom 22 – seg 23/11 | OTel completo, `OrderCreated` v2, autoescala | Trace da saga no Jaeger; demo v1/v2/v3; autoscaler escala o payment |
@@ -25,7 +25,7 @@ Princípio: primeiro o **núcleo avaliado** (R1–R6, F1–F8 e os 3 elementos o
 | **Spike MiniStack:** raw delivery, filter policy, redrive para DLQ, `ApproximateReceiveCount`, `ApproximateNumberOfMessages`, `ChangeMessageVisibility`, `docker pause` preservando filas | Pedro | Respostas registradas. Cada plano B acionado vira ADR |
 | **Spike Terraform:** provider AWS contra o MiniStack (SNS, SQS, assinaturas, S3, Secrets Manager, `tls_private_key`) | Matheus | `terraform apply` limpo dentro do `infra-init` |
 | `docker-compose.yml` da raiz com `include:`, `infra/compose/compose.yaml` (ministack, infra-init, otel-collector, jaeger), redes `edge`/`backend`/`<svc>-data` | Matheus | `docker compose up` sobe a infra saudável |
-| Templates de serviço por linguagem: `Makefile`, `Dockerfile`, `compose.yaml`, `.env.example`, `README.md` | Pedro (Go), Felipe (Java), Gabriel (C#), Matheus (TS) | Serviço "hello" com `/health/live` buildando a partir da própria pasta |
+| Templates de serviço por linguagem: `Makefile`, `Dockerfile`, `compose.yaml`, `.env.example`, `README.md` | Pedro (Go), Felipe e Matheus (Java), Gabriel (C#) | Serviço "hello" com `/health/live` buildando a partir da própria pasta |
 | CI: `root.yml` (contracts validate + `sync-shared --check`) e um workflow por serviço | Matheus | Pipeline verde no PR |
 
 **Checkpoint F0:** infra sobe com um comando, os spikes estão respondidos e os templates buildam isolados.
@@ -36,7 +36,7 @@ Princípio: primeiro o **núcleo avaliado** (R1–R6, F1–F8 e os 3 elementos o
 |---|---|---|
 | `shared/go`: envelope, messaging (SNS/SQS, desembrulho), outbox + relay, idempotency, retry, logging, OTel propagation | Pedro | R1, R6 |
 | `shared/dotnet`: idem | Gabriel + Yasmin | R1, R6 |
-| `platform/` no auth (Java) e no order (TS), com o mesmo contrato | Felipe, Matheus | R1, R6 |
+| `platform/` no auth, no order e no inventory (Java), com o mesmo contrato | Felipe, Matheus | R1, R6 |
 | `scripts/sync-shared.sh` (+ `--check`, reescrita de import Go) | Pedro | ADR-0017 |
 | Esqueleto dos 8 serviços com migrations Flyway (`outbox`, `processed_messages`, roles `owner/app/worker`), health live/ready e config validada | cada dono | padrões §6, §9 |
 | Testes de contrato lendo `contracts/` vendorizado | cada dono | RFC 0001 |
@@ -114,7 +114,7 @@ Princípio: primeiro o **núcleo avaliado** (R1–R6, F1–F8 e os 3 elementos o
 | Saga com compensação | F3 | `f1-compensation.sh` |
 | Dependência instável | F2 | Envs `PAYMENT_*` mudam o comportamento |
 | Evento com 2+ consumidores | F2 | `TicketsIssued` → user + notification |
-| R1 | F1 | Teste de duplicata nas 4 linguagens; `f3-duplicate.sh` |
+| R1 | F1 | Teste de duplicata nas 3 linguagens; `f3-duplicate.sh` |
 | R2 | F2 | Teste de concorrência; `f5-race.sh` |
 | R3 | F2 | 202 + `GET /orders/{id}` |
 | R4 | F2 | 2 réplicas na mesma fila |
@@ -128,6 +128,6 @@ Princípio: primeiro o **núcleo avaliado** (R1–R6, F1–F8 e os 3 elementos o
 | Risco | Mitigação |
 |---|---|
 | MiniStack sem suporte a algum recurso (redrive, atributos) | Spike no dia 1, plano B já descrito (RFC 0003 §9, ADR-0015) |
-| Pedro sobrecarregado (4 componentes Go) | Matheus assume o notification e os scripts; o autoscaler é o primeiro corte |
+| Pedro sobrecarregado (3 componentes Go) | Matheus assume o notification e os scripts; o autoscaler é o primeiro corte |
 | Integração tardia entre linguagens | Contratos fechados agora + testes de contrato desde a F1 |
 | Máquina da demo sem memória para ~20 containers | Imagens slim, limites de memória no compose, ensaio em máquina-alvo na F5 |

@@ -8,7 +8,7 @@ Fonte da verdade da camada de plataforma dos serviços C#: payment e user (ADR-0
 2. suba o `VERSION`;
 3. rode o sync.
 
-O contrato, igual nas 4 linguagens, está na seção *Platform contract* de [`docs/superpowers/plans/2026-11-12-f1-platform.md`](../../docs/superpowers/plans/2026-11-12-f1-platform.md). Tudo fica no namespace `TicketPro.Platform`.
+O contrato, igual nas 3 linguagens, está na seção *Platform contract* de [`docs/superpowers/plans/2026-11-12-f1-platform.md`](../../docs/superpowers/plans/2026-11-12-f1-platform.md). Tudo fica no namespace `TicketPro.Platform`.
 
 | Pasta | Tipos |
 |---|---|

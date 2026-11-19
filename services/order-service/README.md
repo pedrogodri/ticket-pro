@@ -1,10 +1,10 @@
 # order-service
 
-API assíncrona de pedidos e orquestrador da saga de compra do Ticket Pro, em TypeScript com Node 22.
+API assíncrona de pedidos e orquestrador da saga de compra do Ticket Pro, em Java 21 (Spring Boot).
 
 **Dono:** Matheus.
 
-**Estado:** F2: API de pedidos (`POST /orders` 202 + `Idempotency-Key`, `GET /orders/{id}`, `GET /orders`) e saga (reserva → pagamento → confirmação; estoque rejeitado ou pagamento recusado cancelam). Deadline scanner e estorno tardio chegam na F3.
+**Estado:** a implementação TypeScript foi removida ([ADR-0021](../../docs/adr/0021-order-and-inventory-in-java.md)) e será refeita em Java. Esta pasta guarda o que ela deve cumprir: migrations, `compose.yaml`, `contracts/` e este README. O código antigo está no histórico do git, no commit `65d538c` (`git show 65d538c:services/order-service/src/...`), como referência de comportamento. O comportamento esperado era: API de pedidos (`POST /orders` 202 + `Idempotency-Key`, `GET /orders/{id}`, `GET /orders`) e saga (reserva → pagamento → confirmação; estoque rejeitado ou pagamento recusado cancelam). Deadline scanner e estorno tardio chegam na F3.
 
 ## Responsabilidades
 
@@ -47,11 +47,9 @@ Constraints-chave:
    - [arquitetura](../../docs/arquitetura.md) §6 (saga);
    - [RFC 0003](../../docs/rfc/0003-failure-handling-strategy.md) inteira;
    - [RFC 0001 §5.5](../../docs/rfc/0001-message-contract-and-event-versioning.md);
-   - [padrões](../../docs/padroes.md) §2.4 (estrutura TS), §4 e §6.
-3. **F1:** Tasks 13–14 do [plano F1](../../docs/superpowers/plans/2026-11-12-f1-platform.md):
-   - a camada `src/platform/` em TS, seguindo o _Platform contract_ e os testes P01–P15;
-   - banco, migrations, relay e readiness.
-4. **F2:** `POST /orders`, `GET /orders/{id}`, a saga e o `scripts/happy-path.sh` ([roadmap](../../docs/roadmap.md)).
+   - [padrões](../../docs/padroes.md) §2.2 (estrutura Java), §4 e §6.
+3. **Plataforma:** o pacote `platform/` em Java (envelope, outbox, idempotência, mensageria, logging), seguindo o _Platform contract_ do [plano F1](../../docs/superpowers/plans/2026-11-12-f1-platform.md) e os testes P01–P15; banco, migrations, relay e readiness. O `auth-service` é o exemplo Java.
+4. **Saga:** `POST /orders`, `GET /orders/{id}`, a saga e o `scripts/happy-path.sh` ([roadmap](../../docs/roadmap.md)).
 
 ## Variáveis de ambiente
 
@@ -70,12 +68,4 @@ O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, s�
 
 ## Comandos
 
-```bash
-make test        # Vitest (unitários + contrato)
-make test-integration  # Testcontainers (P07–P15)
-make lint        # ESLint (typescript-eslint strict, sem any) + Prettier
-make typecheck   # tsc --noEmit (strict)
-make run         # sobe só este serviço
-```
-
-Sem Node instalado, os alvos rodam sozinhos no container `node:22`, com `node_modules` num volume, fora do checkout. Para forçar: `make test TOOLCHAIN=docker`. Também há um Dev Container em [`.devcontainer/`](.devcontainer/devcontainer.json).
+A fazer: `Makefile`, `Dockerfile` e `.devcontainer/` em Java, com os alvos de [padrões §1.2](../../docs/padroes.md) (`test`, `test-integration`, `lint`, `typecheck`, `run`), iguais aos do `auth-service`. Até lá, o `compose.yaml` desta pasta não builda.

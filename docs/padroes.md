@@ -24,8 +24,8 @@ ticket-pro/
 │   ├── gateway/               # Go
 │   ├── auth-service/          # Java
 │   ├── user-service/          # C#
-│   ├── order-service/         # TypeScript
-│   ├── inventory-service/     # Go
+│   ├── order-service/         # Java
+│   ├── inventory-service/     # Java
 │   ├── payment-service/       # C#
 │   ├── notification-service/  # Go
 │   └── autoscaler/            # Go
@@ -62,7 +62,7 @@ ticket-pro/
 | `make test-integration` | Testes com Testcontainers (Postgres, MiniStack) |
 | `make lint` | Linter + formatação (modo check) |
 | `make fmt` | Formata |
-| `make typecheck` | Checagem de tipos (TS: `tsc --noEmit`; Go: `go vet`; C#/Java: build com warnings como erro) |
+| `make typecheck` | Checagem de tipos (Go: `go vet`; C#/Java: build com warnings como erro) |
 | `make run` | Sobe o serviço e as dependências com o `compose.yaml` local |
 
 ## 2. Estrutura interna (feature-first)
@@ -72,28 +72,17 @@ Cada serviço é organizado por **módulo de negócio** e, dentro dele, por cama
 - `modules/<feature>/` contém handlers/endpoints (entrada), application (casos de uso), domain (regras, tipos, máquina de estados) e infrastructure (repositório SQL, cliente externo).
 - **Domain não importa infrastructure nem framework.** A regra de negócio não fica no handler HTTP nem no consumidor de fila. Os dois só traduzem a entrada e chamam o caso de uso.
 - Módulos não acessam o repositório de outro módulo. Usam a interface de aplicação do outro.
-- `platform/` é vendorizada em Go/C# e **não se edita** (ADR-0017). Em Java/TS, `platform/` é própria do serviço, mas segue o mesmo contrato.
+- `platform/` é vendorizada em Go/C# e **não se edita** (ADR-0017). Em Java, `platform/` é própria do serviço, mas segue o mesmo contrato.
 
-### 2.1 Go (gateway, inventory, notification, autoscaler)
+### 2.1 Go (gateway, notification, autoscaler)
 
 ```
-services/inventory-service/
-├── cmd/inventory-service/main.go       # wiring; subcomando `healthcheck`
+services/notification-service/
+├── cmd/notification-service/main.go    # wiring; subcomando `healthcheck`
 ├── internal/
 │   ├── app/                            # config (env), server HTTP, workers, shutdown
 │   ├── modules/
-│   │   ├── catalog/                    # GET /events
-│   │   │   ├── handler.go
-│   │   │   ├── service.go
-│   │   │   ├── repository.go
-│   │   │   └── types.go
-│   │   ├── reservations/               # OrderCreated/OrderCancelled, expiração
-│   │   │   ├── consumer.go
-│   │   │   ├── service.go
-│   │   │   ├── repository.go
-│   │   │   ├── expiration_job.go
-│   │   │   └── types.go
-│   │   └── tickets/                    # OrderConfirmed → TicketsIssued
+│   │   └── receipts/                   # TicketsIssued/OrderCancelled → comprovante no S3
 │   └── platform/                       # VENDORIZADO de shared/go — não edite
 ├── migrations/
 ├── contracts/                          # VENDORIZADO
@@ -103,7 +92,7 @@ services/inventory-service/
 
 Testes ficam ao lado do código (`*_test.go`). Testes de integração usam a build tag `integration`.
 
-### 2.2 Java (auth-service), Spring Boot
+### 2.2 Java (auth-service, order-service, inventory-service), Spring Boot
 
 ```
 services/auth-service/
@@ -138,31 +127,6 @@ services/payment-service/
 ├── PaymentService.sln, Directory.Build.props (Nullable=enable, TreatWarningsAsErrors=true)
 └── Makefile, Dockerfile, compose.yaml, .env.example, README.md
 ```
-
-### 2.4 TypeScript (order-service), Node 22
-
-```
-services/order-service/
-├── src/
-│   ├── main.ts
-│   ├── app/                            # config (zod sobre process.env), server, workers
-│   ├── platform/                       # envelope, outbox, idempotency, messaging, logging (próprio)
-│   └── modules/
-│       └── orders/
-│           ├── http/                   # rotas POST/GET /orders, schemas zod de entrada
-│           ├── application/            # casos de uso: createOrder, handleInventoryReserved…
-│           ├── domain/                 # máquina de estados, tipos
-│           ├── infrastructure/         # repositório pg
-│           ├── consumers/              # handlers de eventos
-│           └── jobs/                   # deadline scanner
-├── tests/                              # unit/, integration/, contract/
-├── migrations/
-├── contracts/
-├── package.json, package-lock.json, tsconfig.json (strict), eslint.config.js
-└── Makefile, Dockerfile, compose.yaml, .env.example, README.md
-```
-
-TypeScript `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`, sem `any` (regra ESLint `no-explicit-any: error`). Toda entrada externa (HTTP, mensagem, env) passa por um schema **zod** antes de virar tipo.
 
 ## 3. Nomes
 
@@ -260,7 +224,7 @@ Logs padronizados que a demo usa: `message_published`, `message_consumed`, `dupl
 ## 6. Banco de dados e migrations
 
 - **PostgreSQL 16**, um container por serviço (ADR-0004).
-- **Migrations em SQL puro com Flyway**, igual nas 4 linguagens. Cada `compose.yaml` tem um job `<svc>-migrate` (imagem `flyway/flyway` com versão fixa) que roda antes do serviço (`service_completed_successfully`).
+- **Migrations em SQL puro com Flyway**, igual nas 3 linguagens. Cada `compose.yaml` tem um job `<svc>-migrate` (imagem `flyway/flyway` com versão fixa) que roda antes do serviço (`service_completed_successfully`).
 - Nomes: `migrations/V0001__create_orders.sql`, `V0002__...`. Seeds de catálogo são migrations versionadas do inventory (`V0003__seed_catalog.sql`, incluindo o setor `F5` com 10 unidades).
 - **Nunca editar uma migration aplicada.** Toda correção é uma nova migration, e o Flyway valida checksum.
 - Uma mudança lógica por migration. DDL e dados em migrations separadas.
@@ -356,7 +320,7 @@ O claim do relay e dos jobs usa `UPDATE … WHERE id IN (SELECT … FOR UPDATE S
 
 | Camada | O que cobre | Ferramentas |
 |---|---|---|
-| **Unitário** | Domain e application: máquina de estados, cálculo de preço, classificação de erro, backoff, upcaster | Go `testing`; JUnit 5; xUnit; Vitest |
+| **Unitário** | Domain e application: máquina de estados, cálculo de preço, classificação de erro, backoff, upcaster | Go `testing`; JUnit 5; xUnit |
 | **Integração** | Repositório + SQL real (R2 com concorrência), outbox/relay, consumidor contra SQS do MiniStack | Testcontainers (Postgres 16, MiniStack) |
 | **Contrato** | Eventos produzidos validam contra `contracts/` vendorizado; exemplos de `contracts/examples` alimentam os handlers | JSON Schema validator da linguagem |
 | **Cenário (E2E)** | F1–F8 com o compose completo; scripts com verificação automática (exit 0/1) | `scripts/f1..f8-*.sh` (bash + curl + aws cli via container) |
@@ -366,7 +330,7 @@ O claim do relay e dos jobs usa `UPDATE … WHERE id IN (SELECT … FOR UPDATE S
 | Requisito | Teste mínimo |
 |---|---|
 | R1 | Integração: a mesma mensagem 5× gera 1 efeito; crash antes do commit gera reentrega |
-| R2 | Integração no inventory: 100 goroutines × setor com 10 dá exatamente 10 reservas e `available = 0` |
+| R2 | Integração no inventory: 100 reservas concorrentes (threads) × setor com 10 dá exatamente 10 reservas e `available = 0` |
 | R3 | `POST /orders` retorna 202 + `Location`; `GET` reflete a evolução do status |
 | R4 | Cenário: 2 réplicas consomem a mesma fila sem efeito duplicado |
 | R5 | Unitário do provedor simulado: latência e taxa de falha respeitam as envs |
@@ -377,5 +341,5 @@ O claim do relay e dos jobs usa `UPDATE … WHERE id IN (SELECT … FOR UPDATE S
 
 - **TDD** na implementação (skill `superpowers:test-driven-development`): teste falhando, implementação mínima, refatoração.
 - Antes de abrir PR: `make lint typecheck test test-integration` verde no serviço, e `npm run validate` em `contracts/` quando mexer em contratos.
-- Lint/format por linguagem: `gofmt` + `golangci-lint`; Spotless (google-java-format); `dotnet format --verify-no-changes` + analyzers com warnings como erro; ESLint (`typescript-eslint` strict) + Prettier.
+- Lint/format por linguagem: `gofmt` + `golangci-lint`; Spotless (google-java-format); `dotnet format --verify-no-changes` + analyzers com warnings como erro.
 - Cobertura: sem meta global; **domain e application ≥ 80%** nos módulos de saga, reserva e pagamento.

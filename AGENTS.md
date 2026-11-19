@@ -5,10 +5,9 @@ Sistema distribuído acadêmico (FURB). Só backend. Respostas em PT-BR; código
 ## Stack
 | Serviço | Linguagem | Pasta |
 |---|---|---|
-| gateway, inventory, notification, autoscaler | Go | `services/{gateway,inventory-service,notification-service,autoscaler}` |
-| auth | Java (Spring Boot) | `services/auth-service` |
+| gateway, notification, autoscaler | Go | `services/{gateway,notification-service,autoscaler}` |
+| auth, order, inventory | Java 21 (Spring Boot) | `services/{auth-service,order-service,inventory-service}` |
 | payment, user | C# (.NET 10) | `services/{payment-service,user-service}` |
-| order | TypeScript (Node 22, strict) | `services/order-service` |
 
 Infra: MiniStack (`AWS_ENDPOINT_URL=http://ministack:4566`), SNS→SQS+DLQ, S3, Secrets Manager, PostgreSQL 16 por serviço, Terraform em `infra/terraform`.
 
@@ -23,7 +22,7 @@ Infra: MiniStack (`AWS_ENDPOINT_URL=http://ministack:4566`), SNS→SQS+DLQ, S3, 
 | Verificar infra AWS / bancos / portas / autonomia | `scripts/verify-infra.sh`, `scripts/verify-platform.sh`, `scripts/check-ports.sh`, `scripts/check-autonomy.sh services/<svc>` |
 | Testes das libs de plataforma | `make -C shared/go test test-integration`, `make -C shared/dotnet test test-integration` |
 
-Todos os 8 serviços têm `Makefile` e `.devcontainer/`. Sem o SDK no PATH, o `make` roda no container da linguagem (`TOOLCHAIN=docker`). Bancos: `<db>-db` + job `<svc>-migrate` (Flyway); credenciais de owner só em `db.env.example`.
+Os serviços têm `Makefile` e `.devcontainer/`, exceto `order-service` e `inventory-service`, em migração para Java (ADR-0021) e ainda sem código, `Makefile` e `Dockerfile`. Sem o SDK no PATH, o `make` roda no container da linguagem (`TOOLCHAIN=docker`). Bancos: `<db>-db` + job `<svc>-migrate` (Flyway); credenciais de owner só em `db.env.example`.
 
 ### Rodar um único teste
 Os alvos `make` não aceitam filtro: chame a ferramenta da linguagem direto, com o SDK local (ou dentro do Dev Container do serviço).
@@ -33,7 +32,6 @@ Os alvos `make` não aceitam filtro: chame a ferramenta da linguagem direto, com
 | Go | `go test ./internal/<pkg> -run TestNome` | mesmo comando + `-tags integration` (arquivos `*_integration_test.go`) |
 | Java | `./mvnw test -Dtest=Classe#metodo` | rodam no `./mvnw verify` |
 | C# | `dotnet test --filter "FullyQualifiedName~Nome&Category!=Integration"` | `--filter "Category=Integration"` (`[Trait("Category", "Integration")]`) |
-| TS | `npx vitest run <arquivo> -t "nome"` | `npx vitest run -c vitest.integration.config.ts <arquivo>` |
 
 Testes dos scripts: `scripts/tests/sync-shared.test.sh`. Cenários de falha da demo: `scripts/f1-*.sh` … `scripts/f8-*.sh` (exigem a stack no ar).
 
@@ -61,13 +59,12 @@ Testes dos scripts: `scripts/tests/sync-shared.test.sh`. Cenários de falha da d
 ## Never
 - Acessar o banco de outro serviço; dados alheios só chegam por evento.
 - Referenciar `../` fora da pasta do serviço (código, Dockerfile, build): cada `services/<svc>` é autônomo (ADR-0016).
-- Editar `services/*/internal/platform/` (Go), `services/*/src/<Projeto>/Platform/` (C#) ou `services/*/contracts/`: são cópias; altere `shared/` ou `contracts/` da raiz e rode `scripts/sync-shared.sh`. (O `services/order-service/src/Platform/` é código próprio do serviço, não cópia.)
+- Editar `services/*/internal/platform/` (Go), `services/*/src/<Projeto>/Platform/` (C#) ou `services/*/contracts/`: são cópias; altere `shared/` ou `contracts/` da raiz e rode `scripts/sync-shared.sh`. (Em Java, `platform/` é código próprio do serviço, não cópia.)
 - Publicar no SNS fora do outbox ou dar ack antes do commit.
 - Editar migration já aplicada; crie `V<next>__*.sql`.
 - Hardcodar endpoint, nome de fila/tópico, credencial, timeout ou taxa: use env.
 - Publicar porta de serviço que não seja o gateway.
 - Ler identidade do corpo/query; só `X-User-Id` injetado pelo gateway.
-- Usar `any` em TypeScript.
 - Commitar na `main` ou dar push sem pedido explícito; usar git worktrees.
 
 ## Always
