@@ -1,7 +1,7 @@
 # ADR-0022: Plataforma Java copiada do auth-service, com checagem de deriva (sem `shared/java`)
 
 - **Data**: 2026-11-19
-- **Status**: Proposto — aguarda aceite do grupo (Matheus, Felipe, Pedro)
+- **Status**: Aceito (2026-11-19)
 - **Decisores**: Grupo
 - **Tags**: código compartilhado, Java, plataforma
 - **Relacionado**: [ADR-0017](0017-vendored-platform-libraries-and-contracts.md), [ADR-0021](0021-order-and-inventory-in-java.md), [RFC 0004](../rfc/0004-camada-platform-em-java-para-order-e-inventory.md)
