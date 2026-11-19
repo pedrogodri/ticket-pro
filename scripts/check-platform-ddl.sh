@@ -24,6 +24,7 @@ done
 ref_fixture=shared/go/internal/testenv/platform.sql
 for f in shared/dotnet/tests/TicketPro.Platform.Tests/TestEnv/platform.sql \
   services/auth-service/src/test/resources/platform.sql; do
+  [ -f "$f" ] || { ok "$f absent (service has no code yet)"; continue; }
   cmp -s "$f" "$ref_fixture" && ok "$f" || fail "$f differs from $ref_fixture"
 done
 if body "$ref_fixture" | grep -qxF -f <( { body "$ref_outbox"; body "$ref_processed"; } ) &&
