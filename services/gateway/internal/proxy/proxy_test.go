@@ -355,3 +355,16 @@ func TestPublicRoutesAreRegisterLoginAndRefreshOnly(t *testing.T) {
 		t.Fatalf("POST /auth/logout without a token: status %d, upstream called %v", rec.Code, s.called)
 	}
 }
+
+// API5/API9: only the configured prefixes are proxied. The JWKS document and the
+// health probes are served by (or only reachable through) the auth service and the
+// gateway itself, never forwarded by the edge.
+func TestUnroutedPathsAre404AndNeverReachAnUpstream(t *testing.T) {
+	for _, path := range []string{"/.well-known/jwks.json", "/health/live", "/health/ready", "/outro", "/"} {
+		var s seen
+		rec := do(handler(t, &s, 0), "GET", path, "good", "", nil)
+		if rec.Code != 404 || s.called {
+			t.Fatalf("GET %s: status %d, upstream called %v", path, rec.Code, s.called)
+		}
+	}
+}
