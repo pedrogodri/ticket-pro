@@ -17,10 +17,11 @@ services:
       inventory-service-migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "/inventory-service", "healthcheck"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live >/dev/null || exit 1"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
+      start_period: 5s
 
   inventory-service-migrate:
     image: flyway/flyway:13.11.1-alpine

@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: ${SERVICE_NAME:inventory-service}
+  main:
+    banner-mode: off
+  jackson:
+    deserialization:
+      # padroes §4: unknown fields in a request body are rejected with 400.
+      fail-on-unknown-properties: true
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+logging:
+  level:
+    root: ${LOG_LEVEL:info}
