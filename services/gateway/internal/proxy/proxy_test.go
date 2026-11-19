@@ -330,3 +330,41 @@ func TestInvalidTokensAreRateLimitedPerIP(t *testing.T) {
 		t.Fatalf("a valid token from the throttled IP: status %d, want 200", rec.Code)
 	}
 }
+
+// RFC 0002 §5.5 / RFC 0010: refresh authenticates with the refresh token in the
+// body, so it must reach the auth service without an access token; logout needs one.
+func TestPublicRoutesAreRegisterLoginAndRefreshOnly(t *testing.T) {
+	var s seen
+	u := upstream(t, &s, 0)
+	h := New(Config{
+		Routes:          map[string]*url.URL{"auth": u},
+		Public:          PublicRoutes(),
+		MaxBodyBytes:    65536,
+		UpstreamTimeout: 500 * time.Millisecond,
+		Verifier:        fakeVerifier{},
+		Logger:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	for _, route := range []string{"/auth/register", "/auth/login", "/auth/refresh"} {
+		s = seen{}
+		if rec := do(h, "POST", route, "", `{}`, nil); rec.Code != 200 || !s.called {
+			t.Fatalf("POST %s without a token: status %d, upstream called %v", route, rec.Code, s.called)
+		}
+	}
+	s = seen{}
+	if rec := do(h, "POST", "/auth/logout", "", `{}`, nil); rec.Code != 401 || s.called {
+		t.Fatalf("POST /auth/logout without a token: status %d, upstream called %v", rec.Code, s.called)
+	}
+}
+
+// API5/API9: only the configured prefixes are proxied. The JWKS document and the
+// health probes are served by (or only reachable through) the auth service and the
+// gateway itself, never forwarded by the edge.
+func TestUnroutedPathsAre404AndNeverReachAnUpstream(t *testing.T) {
+	for _, path := range []string{"/.well-known/jwks.json", "/health/live", "/health/ready", "/outro", "/"} {
+		var s seen
+		rec := do(handler(t, &s, 0), "GET", path, "good", "", nil)
+		if rec.Code != 404 || s.called {
+			t.Fatalf("GET %s: status %d, upstream called %v", path, rec.Code, s.called)
+		}
+	}
+}

@@ -80,9 +80,8 @@ func main() {
 	revocations := revocation.Store{Client: rdb}
 
 	edge := proxy.New(proxy.Config{
-		Routes: cfg.Routes,
-		// RFC 0002 §5.5: the only routes without a token (refresh arrives in F3).
-		Public:          map[string]bool{"POST /auth/register": true, "POST /auth/login": true},
+		Routes:          cfg.Routes,
+		Public:          proxy.PublicRoutes(), // RFC 0002 §5.5: the only routes without a token
 		MaxBodyBytes:    cfg.MaxBodyBytes,
 		UpstreamTimeout: cfg.UpstreamTimeout,
 		Verifier:        verifier,

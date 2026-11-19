@@ -46,6 +46,16 @@ type Limits struct {
 	Orders  ratelimit.Rule // POST /orders, per user, against scalping (ORDERS_*)
 }
 
+// PublicRoutes lists the only routes served without an access token (RFC 0002
+// §5.5). Refresh is public because it authenticates with the refresh token.
+func PublicRoutes() map[string]bool {
+	return map[string]bool{
+		"POST /auth/register": true,
+		"POST /auth/login":    true,
+		"POST /auth/refresh":  true,
+	}
+}
+
 // Config configures the edge handler.
 type Config struct {
 	Routes          map[string]*url.URL // first path segment → upstream (GATEWAY_ROUTES)
