@@ -1,0 +1,8 @@
+target
+.mvn
+mvnw
+.env
+compose.yaml
+Makefile
+README.md
+.devcontainer
