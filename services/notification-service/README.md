@@ -9,6 +9,12 @@ Registro de notificações e comprovantes de compra no S3 do Ticket Pro, em Go. 
 - readiness com `db` e `broker`;
 - tracing HTTP, de banco e de mensagens.
 
+Design completo: [RFC 0011](../../docs/rfc/0011-design-do-notification-service-em-go.md). Plano: [notification-service](../../docs/superpowers/plans/2026-11-19-notification-service.md).
+
+## O que "notificar" significa
+
+Não há canal externo (e-mail, SMS ou push). Notificar é **registrar** em `notifications` e, no caso de `TicketsIssued`, **gravar o comprovante** no S3 (RFC 0011, Decisão 2). O comprovante só existe depois que a saga termina, então a prova ponta a ponta depende do order e do inventory em Java emitirem os eventos.
+
 ## Responsabilidades
 
 - Consumir `TicketsIssued` e gravar o comprovante em `s3://ticketpro-receipts/receipts/{orderId}.json`. A chave é determinística, então reescrever é idempotente ([ADR-0006](../../docs/adr/0006-idempotent-consumers-processed-messages.md)).
@@ -19,8 +25,8 @@ Registro de notificações e comprovantes de compra no S3 do Ticket Pro, em Go. 
 
 | Endpoint | Fase | Resposta |
 |---|---|---|
-| `GET /health/live` | F0 ✅ | `200 {"status":"up"}` |
-| `GET /health/ready` | F0 ✅ (`db` na F1) | `200 {"status":"up","checks":{}}` |
+| `GET /health/live` | ✅ | `200 {"status":"up"}` |
+| `GET /health/ready` | ✅ | `200 {"status":"up","checks":{"db":"up","broker":"up"}}`; banco fora → `503`; broker fora → `checks.broker` = `degraded`, ainda 200 (RFC 0003, Decisão 8) |
 
 ## Eventos
 
@@ -40,8 +46,8 @@ O banco é `notifications`, no container `notifications-db`. Tabelas: `notificat
    - [padrões](../../docs/padroes.md) §2.1 e §7;
    - [ADR-0006](../../docs/adr/0006-idempotent-consumers-processed-messages.md);
    - [RFC 0003](../../docs/rfc/0003-failure-handling-strategy.md) §5.4.
-3. **F1:** Task 6 do [plano F1](../../docs/superpowers/plans/2026-11-12-f1-platform.md) (banco + readiness). Depende das Tasks 3–4, a lib `shared/go`.
-4. **F2:** consumir `TicketsIssued`/`OrderCancelled` e gravar o comprovante no S3 ([roadmap](../../docs/roadmap.md)).
+3. Design e plano: [RFC 0011](../../docs/rfc/0011-design-do-notification-service-em-go.md) e [plano](../../docs/superpowers/plans/2026-11-19-notification-service.md).
+4. Testes: `make test` (unidade) e `make test-integration` (módulo `receipts` contra o MiniStack e o Postgres).
 
 ## Variáveis de ambiente
 
@@ -71,7 +77,7 @@ Sem Go instalado, os alvos rodam sozinhos no container `golang:1.25`. Para forç
 
 ## Tracing
 
-OpenTelemetry ([ADR-0012](../../docs/adr/0012-opentelemetry-collector-jaeger.md)). `OTEL_EXPORTER_OTLP_ENDPOINT` (padrão `otel-collector:4317`) envia os spans ao collector, e de lá para o Jaeger (`http://localhost:16686`). Sem a variável, nada é exportado. `OTEL_SERVICE_NAME` é opcional; o padrão é `SERVICE_NAME`.
+OpenTelemetry ([ADR-0012](../../docs/adr/0012-opentelemetry-tracing.md)). `OTEL_EXPORTER_OTLP_ENDPOINT` (padrão `otel-collector:4317`) envia os spans ao collector, e de lá para o Jaeger (`http://localhost:16686`). Sem a variável, nada é exportado. `OTEL_SERVICE_NAME` é opcional; o padrão é `SERVICE_NAME`.
 - **HTTP:** um span por requisição (`otelhttp`), exceto `/health/*`.
 - **Banco:** spans das queries (`otelpgx`).
 - **Mensagens:** span `consumer` por mensagem, no trace do producer e com link para ele. Span `producer` por publicação do outbox, que propaga o `traceparent`.
