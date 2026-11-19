@@ -1,8 +1,0 @@
-node_modules
-dist
-tests
-.env
-compose.yaml
-Makefile
-README.md
-.devcontainer

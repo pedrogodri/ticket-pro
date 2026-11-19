@@ -2,7 +2,7 @@
 
 Backend distribuído de venda de ingressos, trabalho final de Sistemas Distribuídos da FURB.
 
-- **8 serviços em 4 linguagens:** Go, Java, C# e TypeScript.
+- **8 serviços em 3 linguagens:** Go, Java e C#.
 - **Comunicação** por eventos (SNS → SQS) numa saga orquestrada, com transactional outbox e consumidores idempotentes.
 - **Infra AWS emulada** pelo MiniStack, criada por Terraform.
 - **Tudo sobe com um comando.**
@@ -15,7 +15,7 @@ Backend distribuído de venda de ingressos, trabalho final de Sistemas Distribu�
 |---|---|---|
 | Docker | **Docker Desktop** ≥ 4.30 **ou** OrbStack | Precisa do Compose ≥ 2.20 (`docker compose version`). |
 | `git`, `make`, `bash` | qualquer | No macOS vêm com o Xcode CLT (`xcode-select --install`). No Windows, use o **WSL2** (Ubuntu) e clone o repo dentro do WSL. |
-| SDK da sua linguagem | Go 1.25, Java 21, .NET 10, Node 22 | **Opcional.** Sem ele, o `make` roda tudo em container (veja a seção 4). |
+| SDK da sua linguagem | Go 1.25, Java 21, .NET 10 | **Opcional.** Sem ele, o `make` roda tudo em container (veja a seção 4). O Node 22 só é usado para validar `contracts/`. |
 
 **No Docker Desktop:**
 
@@ -89,7 +89,7 @@ make test-integration   # Testcontainers (Postgres, MiniStack)
 make run         # sobe só este serviço
 ```
 
-- **`TOOLCHAIN=docker`:** se o SDK não estiver no `PATH`, o `make` roda o comando dentro da imagem oficial (`golang:1.25`, `eclipse-temurin:21-jdk`, `mcr.microsoft.com/dotnet/sdk:10.0`, `node:22`). Os caches de dependências ficam em volumes `ticketpro-*-cache`. Para forçar mesmo com o SDK instalado: `make test TOOLCHAIN=docker`.
+- **`TOOLCHAIN=docker`:** se o SDK não estiver no `PATH`, o `make` roda o comando dentro da imagem oficial (`golang:1.25`, `eclipse-temurin:21-jdk`, `mcr.microsoft.com/dotnet/sdk:10.0`; `node:22` só em `contracts/`). Os caches de dependências ficam em volumes `ticketpro-*-cache`. Para forçar mesmo com o SDK instalado: `make test TOOLCHAIN=docker`.
 - **Dev Container:** cada serviço tem `.devcontainer/devcontainer.json`. No VS Code (extensão *Dev Containers*), abra **a pasta do serviço** (`services/<svc>`) e escolha *Reopen in Container*. O editor ganha autocomplete e debug com o SDK do container, e os testes de integração usam o Docker do host.
 - **Linux sem Docker Desktop:** os arquivos gerados no modo docker (`bin/`, `obj/`, `target/`) ficam com dono `root`. Para corrigir, rode `sudo chown -R "$USER" .` ou use o Dev Container.
 - **Contratos:** `make -C contracts check`, com o mesmo `TOOLCHAIN`.

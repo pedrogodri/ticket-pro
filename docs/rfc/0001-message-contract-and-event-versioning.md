@@ -167,5 +167,5 @@ O **preço** é do inventory: ele o informa em `InventoryReserved`, e o order us
 ## 12. Phasing
 
 - **P1:** `envelope.schema.json`, `common.schema.json`, schemas v1 de todos os eventos, exemplos e validação em CI (esta etapa de docs).
-- **P2:** libs `shared/go` e `shared/dotnet` (envelope + desembrulho SNS), equivalentes em Java/TS.
+- **P2:** libs `shared/go` e `shared/dotnet` (envelope + desembrulho SNS), equivalente em Java.
 - **P3 (bônus):** `OrderCreated` v2 + upcaster + roteiro de demo.

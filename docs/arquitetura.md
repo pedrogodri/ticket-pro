@@ -26,8 +26,8 @@ flowchart LR
     subgraph services[rede backend]
         auth[auth-service<br/>Java]
         user[user-service<br/>C#]
-        order[order-service<br/>TypeScript]
-        inv[inventory-service<br/>Go]
+        order[order-service<br/>Java]
+        inv[inventory-service<br/>Java]
         pay[payment-service<br/>C#]
         notif[notification-service<br/>Go]
         scaler[autoscaler<br/>Go]
@@ -88,8 +88,8 @@ flowchart LR
 | gateway | Go | rate limit, cópia da blacklist de `jti` (Redis próprio) | roteamento por prefixo | — | `TokenRevoked` |
 | auth-service | Java | credenciais, refresh tokens, chave JWT (Secrets Manager), blacklist `jti` | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`; interno `GET /.well-known/jwks.json` | `UserRegistered`, `TokenRevoked` | `UserCreationFailed` |
 | user-service | C# | perfil, read model "meus ingressos" | `GET /me`, `GET /me/tickets` | `UserCreationFailed` | `UserRegistered`, `OrderConfirmed`, `TicketsIssued` |
-| order-service | TypeScript | pedidos, máquina de estados da saga | `POST /orders` (202), `GET /orders/{id}`, `GET /orders` | `OrderCreated`, `PaymentRequested`, `OrderConfirmed`, `OrderCancelled`, `RefundRequested` | `InventoryReserved`, `InventoryRejected`, `InventoryReservationExpired`, `PaymentApproved`, `PaymentFailed`, `PaymentRefunded` |
-| inventory-service | Go | eventos, setores, estoque, reservas, ingressos | `GET /events`, `GET /events/{id}` | `InventoryReserved`, `InventoryRejected`, `InventoryReservationExpired`, `TicketsIssued` | `OrderCreated` (v1 e v2), `OrderConfirmed`, `OrderCancelled` |
+| order-service | Java | pedidos, máquina de estados da saga | `POST /orders` (202), `GET /orders/{id}`, `GET /orders` | `OrderCreated`, `PaymentRequested`, `OrderConfirmed`, `OrderCancelled`, `RefundRequested` | `InventoryReserved`, `InventoryRejected`, `InventoryReservationExpired`, `PaymentApproved`, `PaymentFailed`, `PaymentRefunded` |
+| inventory-service | Java | eventos, setores, estoque, reservas, ingressos | `GET /events`, `GET /events/{id}` | `InventoryReserved`, `InventoryRejected`, `InventoryReservationExpired`, `TicketsIssued` | `OrderCreated` (v1 e v2), `OrderConfirmed`, `OrderCancelled` |
 | payment-service | C# | pagamentos, provedor simulado instável | — (só eventos) | `PaymentApproved`, `PaymentFailed`, `PaymentRefunded` | `PaymentRequested`, `RefundRequested` |
 | notification-service | Go | registro de notificações, comprovantes no S3 | — (só eventos) | — | `TicketsIssued`, `OrderCancelled` |
 | autoscaler | Go | — (sem banco) | — | — | lê atributos das filas SQS |
@@ -261,7 +261,7 @@ Todos os serviços que publicam têm `outbox`, e todos os que consomem têm `pro
 
 | Req. | Como é atendido | Onde |
 |---|---|---|
-| ≥4 serviços, ≥3 linguagens | 7 serviços em Go, Java, TypeScript e C# | §3, ADR-0008 |
+| ≥4 serviços, ≥3 linguagens | 7 serviços em Go, Java e C# | §3, ADR-0008, ADR-0021 |
 | Banco por serviço | Postgres/Redis dedicados, redes isoladas | §2, §8, ADR-0004 |
 | Mensageria + ≥3 categorias de nuvem | SNS/SQS, S3, Secrets Manager | §4, ADR-0010 |
 | Tudo por `docker compose up` + init | container `infra-init` (Terraform) + seeds por migration | ADR-0009, ADR-0011 |

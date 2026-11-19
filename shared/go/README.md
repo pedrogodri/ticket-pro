@@ -10,7 +10,7 @@ Fonte da verdade da camada de plataforma dos serviços Go (ADR-0017). **Não imp
 | `logging` | `New(w, service, level)` com as chaves de padrões §5 e `WithCorrelationID` |
 | `idempotency`, `outbox`, `messaging` | `processed_messages`, outbox + relay e consumidor SQS (Task 4 do plano F1) |
 
-O contrato completo, igual nas 4 linguagens, está na seção *Platform contract* de [`docs/superpowers/plans/2026-11-12-f1-platform.md`](../../docs/superpowers/plans/2026-11-12-f1-platform.md).
+O contrato completo, igual nas 3 linguagens, está na seção *Platform contract* de [`docs/superpowers/plans/2026-11-12-f1-platform.md`](../../docs/superpowers/plans/2026-11-12-f1-platform.md).
 
 ## Dependências que o serviço precisa no `go.mod`
 

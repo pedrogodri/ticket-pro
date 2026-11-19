@@ -1,7 +1,7 @@
 # ADR-0008: Linguagem por serviço
 
 - **Data**: 2026-11-12
-- **Status**: Aceito — versão do .NET substituída por [ADR-0018](0018-runtime-versions.md)
+- **Status**: Aceito — versão do .NET substituída por [ADR-0018](0018-runtime-versions.md); order-service e inventory-service substituídos por [ADR-0021](0021-order-and-inventory-in-java.md)
 - **Decisores**: Grupo
 - **Tags**: organização, linguagens
 
