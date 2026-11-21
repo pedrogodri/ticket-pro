@@ -65,7 +65,7 @@ public sealed class PaymentFlowTests(PaymentsDatabase db) : IAsyncLifetime
         var rows = new List<(string, JsonElement, Guid)>();
         while (await reader.ReadAsync())
         {
-            rows.Add((reader.GetString(0), JsonDocument.Parse(reader.GetString(1)).RootElement.Clone(), reader.GetGuid(2)));
+            rows.Add((reader.GetString(0), JsonElement.Parse(reader.GetString(1)), reader.GetGuid(2)));
         }
         return rows;
     }
