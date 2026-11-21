@@ -83,7 +83,7 @@ Roda o caminho feliz 3 vezes e conta `message_consumed` por réplica de order, i
 
 `scripts/f1-compensation.sh`
 
-Recria o payment com `PAYMENT_FAILURE_RATE=1`. O pedido segue `PaymentFailed` → `OrderCancelled(PAYMENT_FAILED)`, e o inventory devolve o estoque.
+Recria o payment com `PAYMENT_FAILURE_RATE=1` ([como o payment funciona](demo/payment-service.md)). O pedido segue `PaymentFailed` → `OrderCancelled(PAYMENT_FAILED)`, e o inventory devolve o estoque.
 
 **Esperado:**
 - `CANCELLED(PAYMENT_FAILED)`;
@@ -154,7 +154,7 @@ Depois do `unpause`, os relays drenam com backoff e a saga chega a um estado fin
 
 `scripts/f7-late-response.sh`
 
-O payment sobe com latência de 20 s, maior que o deadline de 15 s do pedido. Em sequência:
+O payment sobe com latência de 20 s, maior que o deadline de 15 s do pedido ([como o payment funciona](demo/payment-service.md)). Em sequência:
 1. o deadline scanner cancela o pedido com `PAYMENT_TIMEOUT` e o inventory devolve o estoque;
 2. a aprovação chega atrasada e vira `RefundRequested`;
 3. o payment estorna e publica `PaymentRefunded`;

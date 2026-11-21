@@ -1,0 +1,5 @@
+[*.cs]
+# Test names use underscores; xUnit test classes are public by convention.
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1515.severity = none
+dotnet_diagnostic.CA2007.severity = none
