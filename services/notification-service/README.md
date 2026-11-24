@@ -38,6 +38,19 @@ Não há canal externo (e-mail, SMS ou push). Notificar é **registrar** em `not
 
 O banco é `notifications`, no container `notifications-db`. Tabelas: `notifications` (`(order_id, kind) UNIQUE`) e `processed_messages`. Não tem outbox, porque o serviço não publica.
 
+## Código
+
+```
+cmd/notification-service/main.go   wiring; subcomando `healthcheck`
+internal/
+├── app/        config (env), servidor HTTP (health), workers, shutdown
+├── receipts/   TicketsIssued/OrderCancelled → comprovante no S3 + tabela notifications
+├── testdb/     Postgres de teste com as migrations reais
+└── platform/   cópia de shared/go: não edite
+```
+
+Escolha do dono ([ADR-0023](../../docs/adr/0023-internal-architecture-chosen-per-service.md)): layout padrão de Go, com `cmd/` + `internal/` e um pacote por responsabilidade, sem nível `modules/` nem pacotes por camada, como no gateway e no autoscaler.
+
 ## Por onde começar
 
 1. Ler a seção *Primeiros passos* do [README da raiz](../../README.md).
@@ -47,7 +60,7 @@ O banco é `notifications`, no container `notifications-db`. Tabelas: `notificat
    - [ADR-0006](../../docs/adr/0006-idempotent-consumers-processed-messages.md);
    - [RFC 0003](../../docs/rfc/0003-failure-handling-strategy.md) §5.4.
 3. Design e plano: [RFC 0011](../../docs/rfc/0011-design-do-notification-service-em-go.md) e [plano](../../docs/superpowers/plans/2026-11-19-notification-service.md).
-4. Testes: `make test` (unidade) e `make test-integration` (módulo `receipts` contra o MiniStack e o Postgres).
+4. Testes: `make test` (unidade) e `make test-integration` (pacote `receipts` contra o MiniStack e o Postgres).
 
 ## Variáveis de ambiente
 

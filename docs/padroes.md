@@ -86,8 +86,8 @@ services/notification-service/
 ├── cmd/notification-service/main.go    # wiring; subcomando `healthcheck`
 ├── internal/
 │   ├── app/                            # config (env), server HTTP, workers, shutdown
-│   ├── modules/                        # exemplo: organização escolhida pelo dono
-│   │   └── receipts/                   # TicketsIssued/OrderCancelled → comprovante no S3
+│   ├── receipts/                       # exemplo: um pacote por responsabilidade, sem nível modules/
+│   │                                   #   TicketsIssued/OrderCancelled → comprovante no S3
 │   └── platform/                       # VENDORIZADO de shared/go — não edite
 ├── migrations/
 ├── contracts/                          # VENDORIZADO
