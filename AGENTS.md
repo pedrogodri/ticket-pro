@@ -20,6 +20,7 @@ Infra: MiniStack (`AWS_ENDPOINT_URL=http://ministack:4566`), SNS→SQS+DLQ, S3, 
 | Testes de integração | `cd services/<svc> && make test-integration` |
 | Sincronizar libs/contratos vendorizados | `scripts/sync-shared.sh` (CI: `--check`) |
 | Verificar infra AWS / bancos / portas / autonomia | `scripts/verify-infra.sh`, `scripts/verify-platform.sh`, `scripts/check-ports.sh`, `scripts/check-autonomy.sh services/<svc>` |
+| Deriva da `platform/` Java entre auth, order e inventory (ADR-0022) | `scripts/check-java-platform.sh` (testes: `scripts/tests/check-java-platform.test.sh`) |
 | Testes das libs de plataforma | `make -C shared/go test test-integration`, `make -C shared/dotnet test test-integration` |
 
 Todos os serviços têm `Makefile`, `Dockerfile` e `.devcontainer/`. Sem o SDK no PATH, o `make` roda no container da linguagem (`TOOLCHAIN=docker`). Bancos: `<db>-db` + job `<svc>-migrate` (Flyway); credenciais de owner só em `db.env.example`.
@@ -32,7 +33,7 @@ Todos os serviços têm `Makefile`, `Dockerfile` e `.devcontainer/`. Sem o SDK n
 - Sem `src/`, `docker build` e o `docker compose up` completo **quebram** nesses serviços; não os trate como regressão.
 - **CI:** os workflows dos quatro pulam os passos quando não há `src/` e voltam a rodar sozinhos quando ele existir.
 - **Volta do código C#:** descomente `payment-service` e `user-service` em `scripts/sync-shared.conf` e rode `scripts/sync-shared.sh` para regerar `Platform/`.
-- **Volta do código Java (auth):** a fixture `src/test/resources/platform.sql` deve ser idêntica à de `shared/go/internal/testenv/` (`scripts/check-platform-ddl.sh`).
+- **Volta do código Java (auth):** a fixture `src/test/resources/platform.sql` deve ser idêntica à de `shared/go/internal/testenv/` (`scripts/check-platform-ddl.sh`), e `scripts/check-java-platform.sh` deve passar: o `StandardJsonLogFormatter` do auth precisa receber a correção do order (`"duplicate":true` como boolean, p18).
 - Hoje o que responde pelo gateway é health, as rotas do gateway, o que os Go servem e `/orders*`; `/auth/*`, `/me*` e `/events*` dão 404/502 até os donos entregarem. A collection `docs/postman/` marca com ⏳ o que está pendente.
 
 ### Rodar um único teste
