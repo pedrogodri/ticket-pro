@@ -12,6 +12,7 @@ services:
       PAYMENT_FAILURE_RATE: ${PAYMENT_FAILURE_RATE:-0.1}
       PAYMENT_LATENCY_MS: ${PAYMENT_LATENCY_MS:-500}
       PAYMENT_PROVIDER_TIMEOUT_MS: ${PAYMENT_PROVIDER_TIMEOUT_MS:-8000}
+      PAYMENT_WORKER_LEASE_MS: ${PAYMENT_WORKER_LEASE_MS:-30000}
     networks: [backend, payment-service-data]
     depends_on:
       payment-service-migrate:
