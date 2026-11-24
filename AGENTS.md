@@ -84,6 +84,7 @@ _Descreve o desenho-alvo; os serviços Java e o user ainda não têm código (ve
 ## Always
 - Mensagem nova ou alterada: schema + exemplo + `contracts/asyncapi.yaml` + `make -C contracts check` + `scripts/sync-shared.sh`, no mesmo PR.
 - Decisão arquitetural nova: ADR em `docs/adr/` (ADR aceito não se edita; substitua).
+- Estrutura interna é livre por serviço (ADR-0023): siga a do serviço que você está mexendo e, ao criar ou mudar a estrutura, registre a escolha e o motivo no README dele. O contrato externo e os caminhos de plataforma, `migrations/` e `contracts/` continuam fixos.
 - Mudança de schema de banco: migration Flyway em `services/<svc>/migrations/`.
 - Commits Conventional com escopo da pasta: `feat(order-service): ...`, `chore(shared): sync ...`.
 - Antes de dizer que está pronto: rodar lint, typecheck e testes do serviço e relatar falhas.

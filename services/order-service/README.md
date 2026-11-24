@@ -53,6 +53,8 @@ br.furb.ticketpro.order
     └── infrastructure/ OrderRepository (JDBC)
 ```
 
+Escolha do dono ([ADR-0023](../../docs/adr/0023-internal-architecture-chosen-per-service.md)): um módulo de negócio (`orders`) com camadas dentro. A saga concentra as regras em `domain/Transitions` (o SQL condicional de cada transição) e mantém o controller e os consumidores finos, só traduzindo a entrada para os casos de uso de `application/`.
+
 A API usa só o pool `app` (`orders_app`, RLS); consumidor, relay e scanner usam só o pool `worker` (`orders_worker`, `BYPASSRLS`). O `platform/` em Java é código do serviço (não é cópia gerada): correção nele deve entrar também nos outros serviços Java (ADR-0022).
 
 ## Observabilidade

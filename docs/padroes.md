@@ -65,23 +65,28 @@ ticket-pro/
 | `make typecheck` | Checagem de tipos (Go: `go vet`; C#/Java: build com warnings como erro) |
 | `make run` | Sobe o serviço e as dependências com o `compose.yaml` local |
 
-## 2. Estrutura interna (feature-first)
+## 2. Estrutura interna (livre por serviço)
 
-Cada serviço é organizado por **módulo de negócio** e, dentro dele, por camada. A plataforma (mensageria, outbox, logging) fica separada do domínio. Regras que valem para todas as linguagens:
+Não há princípio comum de organização interna ([ADR-0023](adr/0023-internal-architecture-chosen-per-service.md)). O dono de cada serviço escolhe a arquitetura que serve melhor ao serviço e à linguagem (camadas, Clean Architecture, hexagonal, *vertical slices*, pacote por funcionalidade ou outra) e registra a escolha, com o motivo, no README do serviço, na seção "Arquitetura" ou "Código".
 
-- `modules/<feature>/` contém handlers/endpoints (entrada), application (casos de uso), domain (regras, tipos, máquina de estados) e infrastructure (repositório SQL, cliente externo).
-- **Domain não importa infrastructure nem framework.** A regra de negócio não fica no handler HTTP nem no consumidor de fila. Os dois só traduzem a entrada e chamam o caso de uso.
-- Módulos não acessam o repositório de outro módulo. Usam a interface de aplicação do outro.
-- `platform/` é vendorizada em Go/C# e **não se edita** (ADR-0017). Em Java, `platform/` é própria do serviço, mas segue o mesmo contrato.
+Continua igual em todos, porque não é arquitetura interna:
+
+- **Contrato externo:** envelope e `contracts/` (RFC 0001), publicação só pelo outbox, consumo com `processed_messages` e ack depois do commit (RFC 0003 §5.4), logs do §5, health do §9, configuração do §8 e erros do §4.1.
+- **Autonomia:** cada `services/<svc>` compila e sobe sozinho (ADR-0016).
+- **Caminhos que as ferramentas leem:** os arquivos e alvos do §1; `migrations/` em quem tem banco; `contracts/` em quem produz ou consome eventos; e a plataforma: vendorizada em Go e C#, sem edição (ADR-0017); própria em Java, no pacote `br.furb.ticketpro.<svc>.platform`, comparado pelo `scripts/check-java-platform.sh` (ADR-0022).
+
+As árvores abaixo marcam o que é **fixo** em cada linguagem. O resto mostra a estrutura atual de um serviço, como exemplo; não é obrigatório.
 
 ### 2.1 Go (gateway, notification, autoscaler)
+
+Fixo: `cmd/<svc>/main.go` e `go.mod`; `internal/platform/` (vendorizado) quando o serviço usa a plataforma; `migrations/` quando tem banco; `contracts/` quando produz ou consome eventos. O gateway não tem banco, e o autoscaler não tem banco nem plataforma. Exemplo: o notification-service.
 
 ```
 services/notification-service/
 ├── cmd/notification-service/main.go    # wiring; subcomando `healthcheck`
 ├── internal/
 │   ├── app/                            # config (env), server HTTP, workers, shutdown
-│   ├── modules/
+│   ├── modules/                        # exemplo: organização escolhida pelo dono
 │   │   └── receipts/                   # TicketsIssued/OrderCancelled → comprovante no S3
 │   └── platform/                       # VENDORIZADO de shared/go — não edite
 ├── migrations/
@@ -94,12 +99,14 @@ Testes ficam ao lado do código (`*_test.go`). Testes de integração usam a bui
 
 ### 2.2 Java (auth-service, order-service, inventory-service), Spring Boot
 
+Fixo: o pacote `br.furb.ticketpro.<svc>.platform`, `src/main/resources/application.yml` só com referências a env, `migrations/`, `contracts/`, `pom.xml` + `mvnw`. Exemplo: a estrutura planejada do auth-service.
+
 ```
 services/auth-service/
 ├── src/main/java/br/furb/ticketpro/auth/
 │   ├── AuthApplication.java
 │   ├── platform/                       # envelope, outbox, idempotency, messaging, logging (próprio)
-│   └── modules/
+│   └── modules/                        # exemplo: organização escolhida pelo dono
 │       ├── registration/  {web, application, domain, infrastructure}
 │       ├── session/       {web, application, domain, infrastructure}   # login, refresh, logout
 │       └── keys/          {web, application, infrastructure}           # JWKS, Secrets Manager
@@ -112,12 +119,14 @@ services/auth-service/
 
 ### 2.3 C# (payment-service, user-service), .NET 10
 
+Fixo: `src/<Projeto>/Platform/` (vendorizado), `migrations/`, `contracts/`, `Directory.Build.props` (`Nullable=enable`, `TreatWarningsAsErrors=true`). Exemplo: o payment-service.
+
 ```
 services/payment-service/
 ├── src/PaymentService/
 │   ├── Program.cs
 │   ├── App/                            # configuração, DI, hosted services
-│   ├── Modules/
+│   ├── Modules/                        # exemplo: organização escolhida pelo dono
 │   │   ├── Payments/  {Application, Domain, Infrastructure, Consumers, Workers}   # sem API HTTP (só health)
 │   │   └── Refunds/   {Application, Domain, Infrastructure, Consumers}
 │   └── Platform/                       # VENDORIZADO de shared/dotnet — não edite
