@@ -186,9 +186,21 @@ class OrderControllerTest {
         .andExpect(jsonPath("$.createdAt").value("2026-11-20T18:30:12.345Z"))
         .andExpect(jsonPath("$.userId").doesNotExist());
 
-    mvc.perform(get("/orders/" + UUID.randomUUID()).header("X-User-Id", USER))
+    String missing = UUID.randomUUID().toString();
+    String correlation = UUID.randomUUID().toString();
+    // padroes §4.1: the problem+json shape, with code and correlationId at the top level.
+    mvc.perform(
+            get("/orders/" + missing)
+                .header("X-User-Id", USER)
+                .header("X-Correlation-Id", correlation))
         .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.code").value("NOT_FOUND"));
+        .andExpect(header().string("Content-Type", "application/problem+json"))
+        .andExpect(jsonPath("$.type").value("https://ticketpro.local/errors/not_found"))
+        .andExpect(jsonPath("$.status").value(404))
+        .andExpect(jsonPath("$.instance").value("/orders/" + missing))
+        .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+        .andExpect(jsonPath("$.correlationId").value(correlation))
+        .andExpect(jsonPath("$.properties").doesNotExist());
     mvc.perform(get("/orders/not-a-uuid").header("X-User-Id", USER))
         .andExpect(status().isNotFound());
   }

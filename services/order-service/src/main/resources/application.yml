@@ -3,6 +3,10 @@ spring:
     name: ${SERVICE_NAME:order-service}
   main:
     banner-mode: off
+  # Java 21: HTTP requests run on virtual threads, like the consumer, relay and job runners.
+  threads:
+    virtual:
+      enabled: true
   jackson:
     deserialization:
       # padroes §4: unknown fields in a request body are rejected with 400.
