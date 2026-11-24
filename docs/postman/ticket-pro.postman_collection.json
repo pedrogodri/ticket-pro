@@ -4082,25 +4082,33 @@
       "name": "06 · Bônus (observabilidade, autoscale, versionamento)",
       "item": [
         {
-          "name": "Trace: gerar uma operação com X-Correlation-Id próprio",
+          "name": "Trace: criar um pedido e seguir no Jaeger",
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [
               {
                 "key": "X-Correlation-Id",
                 "value": "cliente-forjado"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/me",
+              "raw": "{{baseUrl}}/orders",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
-                "me"
+                "orders"
               ]
             },
-            "description": "Depois, abra o Jaeger em http://localhost:16686 e procure o trace de `gateway` → `user-service`.",
+            "description": "Depois, abra o Jaeger em http://localhost:16686, serviço `gateway`, operação `POST /orders`. O trace passa por gateway → order-service (`POST /orders`, as queries, `publish OrderCreated`). Com o inventory no ar, segue pelo payment (`process PaymentRequested` → `charge payment` → `publish PaymentApproved`) e volta ao order (`publish OrderConfirmed`).\n\nSem o inventory, usa `eventId`/`sectorId` fixos e o pedido fica `PENDING`.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -4110,15 +4118,31 @@
                   "type": "string"
                 }
               ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 1\n}"
             }
           },
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('eventId')) {",
+                  "  pm.collectionVariables.set('eventId', '00000000-0000-7000-8000-0000000000e1');",
+                  "  pm.collectionVariables.set('sectorId', '00000000-0000-7000-8000-0000000000a1');",
+                  "}"
+                ]
+              }
+            },
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"status 202\", () => pm.response.to.have.status(202));",
                   "pm.test('o cliente não impõe o correlationId (gateway o substitui)', () => pm.expect(pm.response.headers.get('X-Correlation-Id') || '').to.not.eql('cliente-forjado'));"
                 ]
               }
@@ -4126,7 +4150,7 @@
           ]
         },
         {
-          "name": "⏳ Autoscale (consumidor conforme a fila)",
+          "name": "Autoscale (consumidor conforme a fila)",
           "request": {
             "method": "GET",
             "header": [],
@@ -4140,7 +4164,7 @@
                 "live"
               ]
             },
-            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/demo-autoscale.sh\n```",
+            "description": "Roda hoje, sem o inventory: acumula 40 `PaymentRequested` na fila do payment, o autoscaler sobe até 5 réplicas, a fila drena e, depois do cooldown, volta a 2. Leva ~40 s.\n\n```bash\nscripts/demo-autoscale.sh\n```\n\nEsperado: `demo-autoscale: 0 failed`. A demo prova o mecanismo (fila → decisão → Docker API → vazão); o backlog real do payment fica na tabela `payments` (RFC 0012, decisão #4).",
             "auth": {
               "type": "noauth"
             }
@@ -4172,7 +4196,109 @@
                 "live"
               ]
             },
-            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/demo-versioning.sh\n```",
+            "description": "⏳ **Pendente**: depende do upcaster `OrderCreated` v1→v2 do inventory-service, que ainda não tem código.\n\n```bash\nscripts/demo-versioning.sh\n```",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 · Checagens por serviço (scripts)",
+      "description": "Serviços sem rota HTTP de negócio (payment, notification) e o gateway são verificados por scripts que publicam eventos ou chamam o gateway e conferem banco, S3 e logs. Rode o comando da descrição com a stack no ar.",
+      "item": [
+        {
+          "name": "Payment sozinho (R5, R1)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "description": "Roda hoje, sem order nem inventory. Publica `PaymentRequested`/`RefundRequested` e confere: um pagamento, uma cobrança e um `PaymentApproved` com o `correlationId` da saga para 4 entregas; um estorno do valor capturado para 2 `RefundRequested`; `FAILED(DECLINED)` com taxa 1; `FAILED(PROVIDER_TIMEOUT)` sem cobrança. Leva ~2 min (recria as réplicas do payment).\n\n```bash\nscripts/payment-check.sh\n```\n\nEsperado: `payment-check: 0 failed`.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Notification sozinho (S3, R1)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "description": "Roda hoje, sem order nem inventory. Publica `TicketsIssued` e `OrderCancelled` 5 vezes cada e confere: um comprovante `receipts/{orderId}.json` no S3, uma linha em `notifications`, 4 duplicatas no log, e nenhum comprovante para pedido cancelado. Leva ~15 s.\n\n```bash\nscripts/notification-check.sh\n```\n\nEsperado: `notification-check: 0 failed`.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('(manual) execute o comando da descrição antes de seguir', () => true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "⏳ Gateway: revogação e rate limit",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "description": "⏳ **Pendente**: depende do auth-service, que ainda não tem código (o script cadastra e loga um usuário).\n\nToken revogado por `TokenRevoked` recebe 401; logins repetidos recebem 429 + `Retry-After`.\n\n```bash\nscripts/gateway-check.sh\n```\n\nEsperado: `gateway-check: 0 failed`.",
             "auth": {
               "type": "noauth"
             }

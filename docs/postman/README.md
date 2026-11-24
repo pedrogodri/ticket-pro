@@ -15,13 +15,14 @@ Suba a stack (`docker compose up --build -d && scripts/wait-healthy.sh`), import
 | 03 Pedidos | saga ponta a ponta (202 → estado final), idempotência, validações, BOLA, rate limit |
 | 04 Usuário | `/me`, `/me/tickets`, isolamento entre usuários |
 | 05 F1–F8 | os 8 cenários da demo; passos de infraestrutura são manuais (comando na descrição) |
-| 06 Bônus | tracing, autoscale, versionamento |
+| 06 Bônus | trace de um pedido no Jaeger, autoscale (roda hoje), versionamento (⏳ inventory) |
+| 07 Checagens por serviço | `payment-check.sh` e `notification-check.sh` (rodam hoje, sem order nem inventory) e `gateway-check.sh` (⏳ auth) |
 
 **⏳ = pendente.** Endpoints que ainda não existem (hoje 404): `/auth/refresh`, `/auth/logout`, `/events*`. A collection descreve o contrato-alvo (RFC 0002/0005) e passa a validar sozinha quando o inventory for entregue. Hoje funcionam health, register, login, `/me`, `/me/tickets`, `/orders*` e as regras do gateway.
 
 **`/orders` sem o inventory:** a pasta 03 usa `eventId`/`sectorId` fixos quando o Setup não os descobre. O order-service aceita o pedido (`202`), mas ele fica `PENDING`; por isso o polling até o estado final, o estoque antes/depois e os cenários F1–F8 seguem com ⏳.
 
-**payment-service:** só consome e publica eventos, sem rota HTTP, então não vira request. A verificação dele sem order nem inventory é `scripts/payment-check.sh` (aprovação, idempotência, estorno único, `DECLINED` e timeout). Os passos de F1, F7 e F8 que recriam o payment trazem o comando `docker compose` na descrição; no F7 o `PAYMENT_WORKER_LEASE_MS` precisa ser maior que o `PAYMENT_PROVIDER_TIMEOUT_MS`.
+**payment-service e notification-service:** só consomem e publicam eventos, sem rota HTTP de negócio, então não viram request. A pasta 07 traz os scripts que os verificam sem order nem inventory: `scripts/payment-check.sh` (aprovação, idempotência, estorno único, `DECLINED` e timeout) e `scripts/notification-check.sh` (comprovante no S3 e notificação únicos para 5 entregas). Os passos de F1, F7 e F8 que recriam o payment trazem o comando `docker compose` na descrição; no F7 o `PAYMENT_WORKER_LEASE_MS` precisa ser maior que o `PAYMENT_PROVIDER_TIMEOUT_MS`.
 
 Rode a pasta 03 com 500 ms entre requests (Runner: *Delay* 500; Newman: `--delay-request 500`): o gateway limita os pedidos a 2/s por usuário (`ORDERS_RPS=2`, `ORDERS_BURST=5`) e responde 429 em rajada.
 
