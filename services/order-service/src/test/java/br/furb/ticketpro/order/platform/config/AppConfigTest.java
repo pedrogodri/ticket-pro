@@ -60,7 +60,11 @@ class AppConfigTest {
     "ORDER_MAX_QUANTITY, 0",
     "ORDER_CREATED_VERSION, 3",
     "CONSUMER_CONCURRENCY, 0",
-    "SQS_WAIT_TIME_S, 21"
+    "SQS_WAIT_TIME_S, 21",
+    "OUTBOX_RETENTION_H, 0",
+    "PROCESSED_MESSAGES_RETENTION_D, 0",
+    "RETENTION_INTERVAL_MS, 0",
+    "RETENTION_BATCH_SIZE, 0"
   })
   void invalidValueFailsNamingIt(String name, String value) {
     Map<String, String> env = validEnv();
@@ -90,6 +94,10 @@ class AppConfigTest {
     assertThat(config.orders())
         .isEqualTo(
             new AppConfig.Orders(Duration.ofMillis(15000), Duration.ofMillis(1000), 50, 6, 2));
+    assertThat(config.retention())
+        .isEqualTo(
+            new AppConfig.Retention(
+                Duration.ofHours(24), Duration.ofDays(7), Duration.ofMillis(60000), 500));
   }
 
   /** RFC 0003 decision 4: TTL 40000 with timeout 15000 and margin 30000 must not boot. */

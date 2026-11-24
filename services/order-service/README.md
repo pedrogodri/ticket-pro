@@ -11,6 +11,7 @@ API assíncrona de pedidos e orquestrador da saga de compra do Ticket Pro, em Ja
 - **R3:** `POST /orders` responde `202` + `Location`, com `Idempotency-Key` obrigatório. O cliente consulta `GET /orders/{id}`.
 - Máquina de estados da saga e compensações ([arquitetura §6](../../docs/arquitetura.md), [RFC 0003 §5.7](../../docs/rfc/0003-failure-handling-strategy.md)): toda transição é um `UPDATE … WHERE id = ? AND status = <esperado>`; evento duplicado, atrasado ou fora de ordem não muda nada (`stale_event`).
 - Deadline scanner de pagamento e estorno de aprovação tardia (F7).
+- Retenção (ADR-0005/0006): o `RetentionJob` apaga em lotes as linhas do `outbox` publicadas há mais de `OUTBOX_RETENTION_H` e as de `processed_messages` mais antigas que `PROCESSED_MESSAGES_RETENTION_D`. Linha ainda não publicada nunca é apagada.
 - `OrderCreated` v1/v2 controlado por `ORDER_CREATED_VERSION` (bônus de versionamento).
 - **BOLA:** pedido de outro usuário → `404`; o SQL filtra por `user_id` e a RLS (`app.user_id`) é a segunda barreira.
 
@@ -44,7 +45,7 @@ Identidade só pelo `X-User-Id` injetado pelo gateway; erros em `application/pro
 
 ```
 br.furb.ticketpro.order
-├── platform/        # RFC 0004: cópia do auth-service (ADR-0022) + SqsConsumerRunner, jobs/, db/UserScopedTransaction
+├── platform/        # RFC 0004: cópia do auth-service (ADR-0022) + SqsConsumerRunner, jobs/, db/UserScopedTransaction, outbox/RetentionJob
 └── modules/orders/
     ├── web/            OrderController, CreateOrderRequest, OrderResponse, CursorCodec
     ├── application/    CreateOrder, OrderQueries, SagaHandlers, DeadlineScanner, OrderEvents
@@ -74,6 +75,8 @@ O banco é `orders`, no container `orders-db`. Tabelas: `orders`, `outbox` e `pr
 | `ORDER_DEADLINE_SCAN_INTERVAL_MS`, `ORDER_DEADLINE_SCAN_BATCH_SIZE` | não | 1000, 50 |
 | `ORDER_MAX_QUANTITY` | não | 6 (o boot falha se > 6) |
 | `ORDER_CREATED_VERSION` | não | 2 (1 ou 2) |
+| `OUTBOX_RETENTION_H`, `PROCESSED_MESSAGES_RETENTION_D` | não | 24, 7 (o job de retenção apaga o outbox já publicado e o `processed_messages` mais antigos que isso) |
+| `RETENTION_INTERVAL_MS`, `RETENTION_BATCH_SIZE` | não | 60000, 500 |
 | `RESERVATION_TTL_MS`, `RESERVATION_SAFETY_MARGIN_MS` | não | 60000, 30000 — o boot falha se `RESERVATION_TTL_MS < ORDER_PAYMENT_TIMEOUT_MS + RESERVATION_SAFETY_MARGIN_MS` |
 
 O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, só desenvolvimento). `contracts/` é cópia gerada por `scripts/sync-shared.sh`: não edite.
@@ -87,4 +90,4 @@ O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, s�
 | Um teste | `./mvnw test -Dtest=OrderControllerTest#createReturns202WithLocation` |
 | Subir só este serviço | `make run` (ou, na raiz, `docker compose up -d --build order-service`) |
 
-Testes: matriz da plataforma P01–P20 (`PlatformCoreTest`, `PlatformIT`, `PeriodicJobRunnerTest`, logger com `"duplicate":true`) e `OrdersIT` (idempotência concorrente, RLS/BOLA, cada guarda da saga, scanner concorrente, corrida scanner × aprovação tardia, estorno único, consumo via SQS).
+Testes: matriz da plataforma P01–P21 (`PlatformCoreTest`, `PlatformIT` com a retenção em p21, `PeriodicJobRunnerTest`, logger com `"duplicate":true`) e `OrdersIT` (idempotência concorrente, RLS/BOLA, cada guarda da saga, scanner concorrente, corrida scanner × aprovação tardia, estorno único, consumo via SQS).

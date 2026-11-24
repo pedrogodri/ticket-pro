@@ -17,6 +17,7 @@ import br.furb.ticketpro.order.platform.outbox.OutboxPublisher;
 import br.furb.ticketpro.order.platform.outbox.OutboxRelay;
 import br.furb.ticketpro.order.platform.outbox.OutboxRelayProperties;
 import br.furb.ticketpro.order.platform.outbox.OutboxWriter;
+import br.furb.ticketpro.order.platform.outbox.RetentionJob;
 import br.furb.ticketpro.order.platform.support.Containers;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
@@ -49,7 +50,7 @@ import software.amazon.awssdk.services.sqs.model.MessageSystemAttributeName;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-/** Platform test matrix P07–P15 (F1 plan) against Testcontainers Postgres + MiniStack. */
+/** Platform test matrix P07–P16 and P21 against Testcontainers Postgres + MiniStack. */
 class PlatformIT {
 
   private static final String TOPIC_ARN = "arn:aws:sns:us-east-1:000000000000:ticketpro-test";
@@ -441,6 +442,55 @@ class PlatformIT {
       }
       assertThat(count(outcomes, ConsumeOutcome.SUCCEEDED)).isEqualTo(2);
     }
+  }
+
+  /**
+   * p21 (RFC 0004 §5.7, ADR-0005/0006): only published outbox rows older than the outbox cutoff and
+   * processed_messages older than theirs go, in batches; an unpublished row is never deleted.
+   */
+  @Test
+  void p21RetentionDeletesOnlyRowsPastTheCutoff() throws Exception {
+    DataSource ds = Containers.postgres();
+    String outbox =
+        "INSERT INTO outbox (message_id, topic_arn, type, version, correlation_id, payload,"
+            + " occurred_at, published_at) VALUES (gen_random_uuid(), 't', 'Ping', 1,"
+            + " gen_random_uuid(), '{}', now() - interval '30 days', now() - ?::interval)";
+    String processed =
+        "INSERT INTO processed_messages (consumer, message_id, processed_at)"
+            + " VALUES ('c1', gen_random_uuid(), now() - ?::interval)";
+    try (Connection c = ds.getConnection()) {
+      for (String age : List.of("25 hours", "25 hours", "25 hours", "1 hour")) {
+        try (PreparedStatement ps = c.prepareStatement(outbox)) {
+          ps.setString(1, age);
+          ps.executeUpdate();
+        }
+      }
+      try (PreparedStatement ps = c.prepareStatement(outbox.replace("now() - ?::interval", "?"))) {
+        ps.setObject(1, null);
+        ps.executeUpdate(); // unpublished for 30 days: still pending, must stay
+      }
+      for (String age : List.of("8 days", "8 days", "8 days", "8 days", "8 days", "1 day")) {
+        try (PreparedStatement ps = c.prepareStatement(processed)) {
+          ps.setString(1, age);
+          ps.executeUpdate();
+        }
+      }
+    }
+    RetentionJob job =
+        new RetentionJob(ds, Duration.ofHours(24), Duration.ofDays(7), Duration.ofMinutes(1), 2);
+
+    // Each run deletes at most 2 per table and reports the larger count, so the runner repeats
+    // while either table still has a full batch to purge.
+    assertThat(List.of(job.runOnce(), job.runOnce(), job.runOnce(), job.runOnce()))
+        .containsExactly(2, 2, 1, 0);
+    assertThat(Containers.count(ds, "SELECT count(*) FROM outbox")).isEqualTo(2);
+    assertThat(Containers.count(ds, "SELECT count(*) FROM outbox WHERE published_at IS NULL"))
+        .isEqualTo(1);
+    assertThat(
+            Containers.count(
+                ds, "SELECT count(*) FROM outbox WHERE published_at > now() - interval '2 hours'"))
+        .isEqualTo(1);
+    assertThat(Containers.count(ds, "SELECT count(*) FROM processed_messages")).isEqualTo(1);
   }
 
   /**

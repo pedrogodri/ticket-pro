@@ -17,6 +17,7 @@ import br.furb.ticketpro.order.platform.messaging.SqsConsumerProperties;
 import br.furb.ticketpro.order.platform.messaging.SqsConsumerRunner;
 import br.furb.ticketpro.order.platform.outbox.OutboxRelay;
 import br.furb.ticketpro.order.platform.outbox.OutboxRelayRunner;
+import br.furb.ticketpro.order.platform.outbox.RetentionJob;
 import com.zaxxer.hikari.HikariDataSource;
 import java.net.URI;
 import java.sql.Connection;
@@ -42,7 +43,10 @@ import software.amazon.awssdk.services.sqs.SqsClientBuilder;
 @Configuration(proxyBeanMethods = false)
 public class AppConfigConfiguration {
 
-  /** Connections beyond the consumer's: relay, deadline scanner and slack (RFC 0004 §5.3). */
+  /**
+   * Connections beyond the consumer's: relay, deadline scanner, retention and slack (RFC 0004
+   * §5.3).
+   */
   private static final int WORKER_POOL_EXTRA = 4;
 
   @Bean
@@ -181,7 +185,13 @@ public class AppConfigConfiguration {
                 orders,
                 events,
                 config.orders().deadlineScanInterval(),
-                config.orders().deadlineScanBatchSize())));
+                config.orders().deadlineScanBatchSize()),
+            new RetentionJob(
+                workerDataSource,
+                config.retention().outbox(),
+                config.retention().processedMessages(),
+                config.retention().interval(),
+                config.retention().batchSize())));
   }
 
   /** Degraded when the relay cannot publish or the consumer cannot receive (RFC 0003 §5.9). */

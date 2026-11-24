@@ -23,6 +23,7 @@ import java.util.function.Function;
  * @param contractsDir CONTRACTS_DIR (vendored contracts/ copied into the image)
  * @param shutdownTimeout SHUTDOWN_TIMEOUT_S: how long in-flight messages may take on stop
  * @param orders saga timing and limits (ORDER_*)
+ * @param retention outbox and processed_messages cleanup (ADR-0005, ADR-0006)
  */
 public record AppConfig(
     String serviceName,
@@ -38,7 +39,8 @@ public record AppConfig(
     Consumer consumer,
     Path contractsDir,
     Duration shutdownTimeout,
-    Orders orders) {
+    Orders orders,
+    Retention retention) {
 
   /** SQS consumer settings (RFC 0003 §5.1). */
   public record Consumer(String queueUrl, int concurrency, int waitTimeSeconds) {}
@@ -58,6 +60,17 @@ public record AppConfig(
       int deadlineScanBatchSize,
       int maxQuantity,
       int createdVersion) {}
+
+  /**
+   * Retention job settings (RFC 0004 §5.7).
+   *
+   * @param outbox OUTBOX_RETENTION_H: published outbox rows older than this are deleted
+   * @param processedMessages PROCESSED_MESSAGES_RETENTION_D: well above the queue retention
+   * @param interval RETENTION_INTERVAL_MS between runs when there is nothing left to purge
+   * @param batchSize RETENTION_BATCH_SIZE: rows deleted per table in one transaction
+   */
+  public record Retention(
+      Duration outbox, Duration processedMessages, Duration interval, int batchSize) {}
 
   /** The database CHECK on orders.quantity (V0004). */
   public static final int MAX_QUANTITY_LIMIT = 6;
@@ -109,7 +122,12 @@ public record AppConfig(
             integer(env, "SQS_WAIT_TIME_S", 10, 0, 20)),
         Path.of(required(env, "CONTRACTS_DIR")),
         Duration.ofSeconds(integer(env, "SHUTDOWN_TIMEOUT_S", 30, 1, 600)),
-        orders);
+        orders,
+        new Retention(
+            Duration.ofHours(integer(env, "OUTBOX_RETENTION_H", 24, 1, 8760)),
+            Duration.ofDays(integer(env, "PROCESSED_MESSAGES_RETENTION_D", 7, 1, 365)),
+            millis(env, "RETENTION_INTERVAL_MS", 60000),
+            integer(env, "RETENTION_BATCH_SIZE", 500, 1, 10000)));
   }
 
   /**
