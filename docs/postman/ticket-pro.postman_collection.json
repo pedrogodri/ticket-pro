@@ -2,7 +2,7 @@
   "info": {
     "name": "Ticket Pro — Gateway (cenários bons e ruins + F1–F8)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Tudo passa pelo gateway (`{{baseUrl}}`, padrão http://localhost:8080). Suba a stack: `docker compose up --build -d && scripts/wait-healthy.sh`.\n\nLegenda: **⏳ = pendente** (endpoint ainda não existe; hoje responde 404, a collection já descreve o contrato-alvo). Hoje funcionam: health, register, login, /me, /me/tickets e as regras do gateway (401/404/413/429).\n\nOrdem: **00 Setup** (cria usuários A/B e descobre evento/setor) → demais pastas. As pastas de cenário (05) têm passos **manuais** (comandos `docker`/scripts) descritos em cada request; as falhas de infraestrutura não existem via HTTP.\n\nSeed: evento \"Festival de Verão 2026\", setor Pista (estoque grande) e setor F5 com 10 unidades (`f5SectorId`).\n\nRodar no terminal: `npx newman run docs/postman/ticket-pro.postman_collection.json -e docs/postman/ticket-pro.local.postman_environment.json --folder \"00 · Setup (rode primeiro)\"`."
+    "description": "Tudo passa pelo gateway (`{{baseUrl}}`, padrão http://localhost:8080). Suba a stack: `docker compose up --build -d && scripts/wait-healthy.sh`.\n\nLegenda: **⏳ = pendente** (endpoint ainda não existe; hoje responde 404, a collection já descreve o contrato-alvo). Hoje funcionam: health, register, login, /me, /me/tickets, /orders (sem o inventory o pedido fica PENDING) e as regras do gateway (401/404/413/429).\n\nOrdem: **00 Setup** (cria usuários A/B e descobre evento/setor) → demais pastas. As pastas de cenário (05) têm passos **manuais** (comandos `docker`/scripts) descritos em cada request; as falhas de infraestrutura não existem via HTTP.\n\nSeed: evento \"Festival de Verão 2026\", setor Pista (estoque grande) e setor F5 com 10 unidades (`f5SectorId`).\n\nRodar no terminal: `npx newman run docs/postman/ticket-pro.postman_collection.json -e docs/postman/ticket-pro.local.postman_environment.json --folder \"00 · Setup (rode primeiro)\"`."
   },
   "variable": [
     {
@@ -1440,7 +1440,7 @@
               ]
             },
             {
-              "name": "⏳ POST /orders → 202 + Location",
+              "name": "POST /orders → 202 + Location",
               "request": {
                 "method": "POST",
                 "header": [
@@ -1466,7 +1466,7 @@
                   "mode": "raw",
                   "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nAPI assíncrona (R3): responde 202 com `orderId`; o status final vem depois.",
+                "description": "API assíncrona (R3): responde 202 com `orderId`; o status final vem depois.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -1517,7 +1517,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "description": "⏳ **Pendente**: depende do inventory-service (sem ele o pedido fica PENDING e o polling desiste em 30 s).\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -1558,7 +1558,7 @@
               ]
             },
             {
-              "name": "⏳ Mesma Idempotency-Key → 200 com o mesmo pedido",
+              "name": "Mesma Idempotency-Key → 200 com o mesmo pedido",
               "request": {
                 "method": "POST",
                 "header": [
@@ -1584,7 +1584,7 @@
                   "mode": "raw",
                   "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nR1/idempotência de criação: sem segundo pedido, sem segunda reserva.",
+                "description": "R1/idempotência de criação: sem segundo pedido, sem segunda reserva.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -1610,7 +1610,7 @@
               ]
             },
             {
-              "name": "⏳ Listar meus pedidos",
+              "name": "Listar meus pedidos",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -1633,7 +1633,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -1741,7 +1741,7 @@
           "name": "Cenários ruins",
           "item": [
             {
-              "name": "⏳ Sem Idempotency-Key → 400",
+              "name": "Sem Idempotency-Key → 400",
               "request": {
                 "method": "POST",
                 "header": [
@@ -1763,7 +1763,7 @@
                   "mode": "raw",
                   "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nHeader obrigatório.",
+                "description": "Header obrigatório.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -1788,7 +1788,7 @@
               ]
             },
             {
-              "name": "⏳ Idempotency-Key não-UUID → 400",
+              "name": "Idempotency-Key não-UUID → 400",
               "request": {
                 "method": "POST",
                 "header": [
@@ -1824,7 +1824,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -1839,7 +1839,7 @@
               ]
             },
             {
-              "name": "⏳ quantity = 0 → 400",
+              "name": "quantity = 0 → 400",
               "request": {
                 "method": "POST",
                 "header": [
@@ -1863,7 +1863,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
+                  "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 0\n}"
                 },
                 "auth": {
                   "type": "bearer",
@@ -1875,7 +1875,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -1890,7 +1890,7 @@
               ]
             },
             {
-              "name": "⏳ quantity = 7 (> ORDER_MAX_QUANTITY=6) → 400",
+              "name": "quantity = 7 (> ORDER_MAX_QUANTITY=6) → 400",
               "request": {
                 "method": "POST",
                 "header": [
@@ -1926,7 +1926,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -1941,7 +1941,7 @@
               ]
             },
             {
-              "name": "⏳ quantity como string → 400",
+              "name": "quantity como string → 400",
               "request": {
                 "method": "POST",
                 "header": [
@@ -1977,7 +1977,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -1992,7 +1992,7 @@
               ]
             },
             {
-              "name": "⏳ Campo extra userId no corpo → 400",
+              "name": "Campo extra userId no corpo → 400",
               "request": {
                 "method": "POST",
                 "header": [
@@ -2018,7 +2018,7 @@
                   "mode": "raw",
                   "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 1,\n  \"userId\": \"11111111-1111-7111-8111-111111111111\"\n}"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nIdentidade só pelo header injetado pelo gateway (BOLA).",
+                "description": "Identidade só pelo header injetado pelo gateway (BOLA).",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -2043,7 +2043,7 @@
               ]
             },
             {
-              "name": "⏳ eventId inválido → 400",
+              "name": "eventId inválido → 400",
               "request": {
                 "method": "POST",
                 "header": [
@@ -2079,7 +2079,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -2094,7 +2094,7 @@
               ]
             },
             {
-              "name": "⏳ Sem token → 401",
+              "name": "Sem token → 401",
               "request": {
                 "method": "POST",
                 "header": [
@@ -2123,7 +2123,7 @@
                 "auth": {
                   "type": "noauth"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -2138,7 +2138,7 @@
               ]
             },
             {
-              "name": "⏳ Falsificar X-User-Id no cliente (ignorado) → pedido é do dono do token",
+              "name": "Falsificar X-User-Id no cliente (ignorado) → pedido é do dono do token",
               "request": {
                 "method": "POST",
                 "header": [
@@ -2168,7 +2168,7 @@
                   "mode": "raw",
                   "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 1\n}"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nO gateway remove `X-User-Id` do cliente e injeta o valor do JWT (RFC 0002).",
+                "description": "O gateway remove `X-User-Id` do cliente e injeta o valor do JWT (RFC 0002).",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -2196,7 +2196,7 @@
               ]
             },
             {
-              "name": "⏳ BOLA: usuário B lê pedido do A → 404",
+              "name": "BOLA: usuário B lê pedido do A → 404",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -2210,7 +2210,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nNão revela a existência do pedido. Precisa de um `orderId` do A.",
+                "description": "Não revela a existência do pedido. Precisa de um `orderId` do A.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -2235,7 +2235,7 @@
               ]
             },
             {
-              "name": "⏳ Pedido inexistente → 404",
+              "name": "Pedido inexistente → 404",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -2259,7 +2259,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -2274,7 +2274,7 @@
               ]
             },
             {
-              "name": "⏳ GET /orders com limit=500 → 400 ou limitado a 50",
+              "name": "GET /orders com limit=500 → 400 ou limitado a 50",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -2297,7 +2297,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -2312,7 +2312,7 @@
               ]
             },
             {
-              "name": "⏳ Setor de outro evento / inexistente → rejeitado",
+              "name": "Setor de outro evento / inexistente → rejeitado",
               "request": {
                 "method": "POST",
                 "header": [
@@ -2338,7 +2338,7 @@
                   "mode": "raw",
                   "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"00000000-0000-7000-8000-000000000000\",\n  \"quantity\": 1\n}"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nSe o order aceitar (202), a saga cancela por falta de estoque; rode \"GET /orders/{id}\" para ver `CANCELLED`.",
+                "description": "Se o order aceitar (202), a saga cancela por falta de estoque; rode \"GET /orders/{id}\" para ver `CANCELLED`. Sem o inventory-service o pedido fica PENDING.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -2409,6 +2409,23 @@
               ]
             }
           ]
+        }
+      ],
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Sem o inventory-service, \"00 · Setup\" não descobre evento/setor: usa ids fixos.",
+              "// O order-service aceita qualquer UUID; sem o inventory o pedido fica PENDING.",
+              "if (!pm.collectionVariables.get('eventId')) {",
+              "  pm.collectionVariables.set('eventId', '00000000-0000-7000-8000-0000000000e1');",
+              "  pm.collectionVariables.set('sectorId', '00000000-0000-7000-8000-0000000000a1');",
+              "  console.warn('eventId/sectorId fixos (inventory ausente): o pedido não sai de PENDING.');",
+              "}"
+            ]
+          }
         }
       ]
     },

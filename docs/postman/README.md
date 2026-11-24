@@ -17,7 +17,11 @@ Suba a stack (`docker compose up --build -d && scripts/wait-healthy.sh`), import
 | 05 F1–F8 | os 8 cenários da demo; passos de infraestrutura são manuais (comando na descrição) |
 | 06 Bônus | tracing, autoscale, versionamento |
 
-**⏳ = pendente.** Endpoints que ainda não existem (hoje 404): `/auth/refresh`, `/auth/logout`, `/events*`, `/orders*`. A collection descreve o contrato-alvo (RFC 0002/0005) e passa a validar sozinha quando order e inventory forem entregues. Hoje funcionam health, register, login, `/me`, `/me/tickets` e as regras do gateway.
+**⏳ = pendente.** Endpoints que ainda não existem (hoje 404): `/auth/refresh`, `/auth/logout`, `/events*`. A collection descreve o contrato-alvo (RFC 0002/0005) e passa a validar sozinha quando o inventory for entregue. Hoje funcionam health, register, login, `/me`, `/me/tickets`, `/orders*` e as regras do gateway.
+
+**`/orders` sem o inventory:** a pasta 03 usa `eventId`/`sectorId` fixos quando o Setup não os descobre. O order-service aceita o pedido (`202`), mas ele fica `PENDING`; por isso o polling até o estado final, o estoque antes/depois e os cenários F1–F8 seguem com ⏳.
+
+Rode a pasta 03 com 500 ms entre requests (Runner: *Delay* 500; Newman: `--delay-request 500`): o gateway limita os pedidos a 2/s por usuário (`ORDERS_RPS=2`, `ORDERS_BURST=5`) e responde 429 em rajada.
 
 Linha de comando (Newman):
 
