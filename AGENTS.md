@@ -46,7 +46,7 @@ Os alvos `make` não aceitam filtro: chame a ferramenta da linguagem direto, com
 | Java | `./mvnw test -Dtest=Classe#metodo` | rodam no `./mvnw verify` |
 | C# | `dotnet test --filter "FullyQualifiedName~Nome&Category!=Integration"` | `--filter "Category=Integration"` (`[Trait("Category", "Integration")]`) |
 
-Testes dos scripts: `scripts/tests/sync-shared.test.sh`. Cenários de falha da demo: `scripts/f1-*.sh` … `scripts/f8-*.sh` (exigem a stack no ar).
+Testes dos scripts: `scripts/tests/sync-shared.test.sh`. Cenários de falha da demo: `scripts/f1-*.sh` … `scripts/f8-*.sh` (exigem a stack no ar). Checagens ao vivo de um serviço sozinho: `scripts/gateway-check.sh`, `scripts/payment-check.sh`.
 
 ## Arquitetura em uma tela
 _Descreve o desenho-alvo; os serviços Java e o user ainda não têm código (ver acima)._

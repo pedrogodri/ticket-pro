@@ -93,4 +93,6 @@ make typecheck   # build com warnings como erro
 make run         # sobe só este serviço
 ```
 
+Com a stack no ar, `scripts/payment-check.sh` (na raiz) verifica o serviço sozinho, sem order nem inventory: publica `PaymentRequested`/`RefundRequested` e confere aprovação, idempotência, estorno único, `DECLINED` e timeout duro.
+
 Sem o .NET SDK instalado, os alvos rodam sozinhos no container `mcr.microsoft.com/dotnet/sdk:10.0`. Para forçar: `make test TOOLCHAIN=docker`. Também há um Dev Container em [`.devcontainer/`](.devcontainer/devcontainer.json).

@@ -180,6 +180,7 @@ O payment sobe com latência de 20 s, maior que o deadline de 15 s do pedido ([c
 | Bônus | Como mostrar | Esperado |
 |---|---|---|
 | **Gateway** (RFC 0002) | `scripts/gateway-check.sh` | token revogado por `TokenRevoked` recebe `401`; logins repetidos recebem `429` + `Retry-After` |
+| **Payment sozinho** (R5, R1; RFC 0009) | `scripts/payment-check.sh` (~2 min: recria as réplicas três vezes) | `APPROVED` com um só pagamento e uma só cobrança para 4 entregas; um estorno do valor capturado para 2 `RefundRequested`; `FAILED(DECLINED)` com taxa 1; `FAILED(PROVIDER_TIMEOUT)` sem cobrança com timeout menor que a latência |
 | **Versionamento** | `scripts/demo-versioning.sh` (detalhes em [demo/versioning.md](demo/versioning.md)) | v1 é convertido para `channel = API`, v2 mantém `WEB` e v3 vai para a DLQ |
 | **Autoescala** | `scripts/demo-autoscale.sh` | com 40 mensagens acumuladas, o payment sobe acima de 2 réplicas (até 5) e volta a 2 depois do cooldown; o log `scale_decision` mostra a profundidade e as réplicas |
 | **OpenTelemetry** | Jaeger → serviço `gateway` → um `GET /events/{id}` | um trace com gateway, inventory e as queries (`SELECT`) |
