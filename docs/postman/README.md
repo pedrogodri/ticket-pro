@@ -21,6 +21,8 @@ Suba a stack (`docker compose up --build -d && scripts/wait-healthy.sh`), import
 
 **`/orders` sem o inventory:** a pasta 03 usa `eventId`/`sectorId` fixos quando o Setup não os descobre. O order-service aceita o pedido (`202`), mas ele fica `PENDING`; por isso o polling até o estado final, o estoque antes/depois e os cenários F1–F8 seguem com ⏳.
 
+**payment-service:** só consome e publica eventos, sem rota HTTP, então não vira request. A verificação dele sem order nem inventory é `scripts/payment-check.sh` (aprovação, idempotência, estorno único, `DECLINED` e timeout). Os passos de F1, F7 e F8 que recriam o payment trazem o comando `docker compose` na descrição; no F7 o `PAYMENT_WORKER_LEASE_MS` precisa ser maior que o `PAYMENT_PROVIDER_TIMEOUT_MS`.
+
 Rode a pasta 03 com 500 ms entre requests (Runner: *Delay* 500; Newman: `--delay-request 500`): o gateway limita os pedidos a 2/s por usuário (`ORDERS_RPS=2`, `ORDERS_BURST=5`) e responde 429 em rajada.
 
 Linha de comando (Newman):

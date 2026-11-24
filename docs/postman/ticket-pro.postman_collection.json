@@ -2641,7 +2641,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nPAYMENT_FAILURE_RATE=1 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nPAYMENT_FAILURE_RATE=1 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -2683,7 +2683,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
               },
               "event": [
                 {
@@ -2737,7 +2737,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
               },
               "event": [
                 {
@@ -2769,7 +2769,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -2821,7 +2821,7 @@
                     "{{eventId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nA liberação é assíncrona (`OrderCancelled` → inventory). Se falhar, espere 1–2 s e envie de novo.",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nA liberação é assíncrona (`OrderCancelled` → inventory). Se falhar, espere 1–2 s e envie de novo.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -2862,7 +2862,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -2922,7 +2922,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
               },
               "event": [
                 {
@@ -2954,7 +2954,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker kill $(docker compose ps -q inventory-service | head -1)\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker kill $(docker compose ps -q inventory-service | head -1)\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -2986,7 +2986,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nA outra réplica assume após o visibility timeout.",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nA outra réplica assume após o visibility timeout.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -3038,7 +3038,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker compose exec -T inventory-db psql -U inventory_owner -d inventory -tAc \"SELECT count(*) FROM reservations WHERE order_id='<orderId>'\"   # = 1\ndocker compose up -d --no-deps inventory-service\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker compose exec -T inventory-db psql -U inventory_owner -d inventory -tAc \"SELECT count(*) FROM reservations WHERE order_id='<orderId>'\"   # = 1\ndocker compose up -d --no-deps inventory-service\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3098,7 +3098,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
               },
               "event": [
                 {
@@ -3161,7 +3161,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
               },
               "event": [
                 {
@@ -3196,7 +3196,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/f3-duplicate.sh\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nscripts/f3-duplicate.sh\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3234,7 +3234,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/f4-poison.sh\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nscripts/f4-poison.sh\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3288,7 +3288,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
               },
               "event": [
                 {
@@ -3320,7 +3320,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -3372,7 +3372,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/dlq.sh\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nscripts/dlq.sh\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3410,7 +3410,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nPAYMENT_FAILURE_RATE=0 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n# setor F5: 10 unidades (id 0193a6f0-4444-7000-8000-0000000000f5), veja scripts/f5-race.sh\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nPAYMENT_FAILURE_RATE=0 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n# setor F5: 10 unidades (id 0193a6f0-4444-7000-8000-0000000000f5), veja scripts/f5-race.sh\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3442,7 +3442,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nSimula a rajada com `pm.sendRequest` assíncrono (concorrência real no cliente). Para o teste canônico, use `scripts/f5-race.sh`.",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nSimula a rajada com `pm.sendRequest` assíncrono (concorrência real no cliente). Para o teste canônico, use `scripts/f5-race.sh`.",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3503,7 +3503,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nPode levar até 60 s.",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nPode levar até 60 s.",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3551,7 +3551,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker pause $(docker compose ps -q ministack)\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker pause $(docker compose ps -q ministack)\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3595,7 +3595,7 @@
                   "mode": "raw",
                   "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nO pedido nasce `PENDING` e o evento fica na `outbox`.",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nO pedido nasce `PENDING` e o evento fica na `outbox`.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -3647,7 +3647,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
               },
               "event": [
                 {
@@ -3677,7 +3677,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nsleep 30 && docker unpause $(docker compose ps -q ministack)\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nsleep 30 && docker unpause $(docker compose ps -q ministack)\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3709,7 +3709,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -3767,7 +3767,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nPAYMENT_LATENCY_MS=20000 PAYMENT_PROVIDER_TIMEOUT_MS=30000 PAYMENT_FAILURE_RATE=0 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nPAYMENT_LATENCY_MS=20000 PAYMENT_PROVIDER_TIMEOUT_MS=30000 PAYMENT_WORKER_LEASE_MS=40000 PAYMENT_FAILURE_RATE=0 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```\n\nO lease precisa ser maior que o timeout (`PAYMENT_WORKER_LEASE_MS > PAYMENT_PROVIDER_TIMEOUT_MS`), senão o payment não sobe.",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3821,7 +3821,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
               },
               "event": [
                 {
@@ -3853,7 +3853,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nLeva ~15 s. O estado não muda quando a aprovação tardia chega: vira `RefundRequested` → `PaymentRefunded`.",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nLeva ~15 s. O estado não muda quando a aprovação tardia chega: vira `RefundRequested` → `PaymentRefunded`.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -3905,7 +3905,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker compose exec -T payments-db psql -U payments_owner -d payments -tAc \"SELECT status FROM payments WHERE order_id='<orderId>'\"   # REFUNDED\ndocker compose up -d --no-deps payment-service\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker compose exec -T payments-db psql -U payments_owner -d payments -tAc \"SELECT status FROM payments WHERE order_id='<orderId>'\"   # REFUNDED\ndocker compose up -d --no-deps payment-service\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3943,7 +3943,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\ndocker compose up -d --no-deps --scale payment-service=3 payment-service\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker compose up -d --no-deps --scale payment-service=3 payment-service\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3975,7 +3975,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n`ORDERS_RPS=2` limita por usuário: o script espera o 429. Para rajada real use `scripts/f8-scale.sh`.",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n`ORDERS_RPS=2` limita por usuário: o script espera o 429. Para rajada real use `scripts/f8-scale.sh`.",
                 "auth": {
                   "type": "noauth"
                 }
@@ -4021,7 +4021,7 @@
                 "auth": {
                   "type": "noauth"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
               },
               "event": [
                 {
@@ -4056,7 +4056,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n```bash\nscripts/check-replicas.sh\ndocker compose up -d --no-deps --scale payment-service=2 payment-service\n```",
+                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nscripts/check-replicas.sh\ndocker compose up -d --no-deps --scale payment-service=2 payment-service\n```",
                 "auth": {
                   "type": "noauth"
                 }
