@@ -7,7 +7,8 @@ Sistema distribuído acadêmico (FURB). Só backend. Respostas em PT-BR; código
 |---|---|---|
 | gateway, notification, autoscaler | Go | `services/{gateway,notification-service,autoscaler}` |
 | auth, order, inventory | Java 21 (Spring Boot), **sem código** | `services/{auth-service,order-service,inventory-service}` |
-| payment, user | C# (.NET 10), **sem código** | `services/{payment-service,user-service}` |
+| payment | C# (.NET 10) | `services/payment-service` |
+| user | C# (.NET 10), **sem código** | `services/user-service` |
 
 Infra: MiniStack (`AWS_ENDPOINT_URL=http://ministack:4566`), SNS→SQS+DLQ, S3, Secrets Manager, PostgreSQL 16 por serviço, Terraform em `infra/terraform`.
 
@@ -28,11 +29,11 @@ Todos os serviços têm `Makefile`, `Dockerfile` e `.devcontainer/`. Sem o SDK n
 `order-service` (Java) tem código: `platform/` (copiada do auth, ADR-0022), API e saga (RFC 0005).
 
 ### Serviços sem código (Java e C#)
-**Sem código hoje:** auth e inventory (Java), user e payment (C#). Os donos implementam todo o código; além dos serviços Go (gateway, notification, autoscaler), só o order-service tem código. Cada um desses quatro mantém só o ambiente: `Dockerfile`, `Makefile`, `compose.yaml`, `.devcontainer/`, `pom.xml`/`mvnw` ou `.sln`, `migrations/`, `contracts/`, `*.env.example` e README. Não existe `src/` nem `tests/`.
+**Sem código hoje:** auth e inventory (Java) e user (C#). Os donos implementam todo o código; têm código os serviços Go (gateway, notification, autoscaler), o order (Java) e o payment (C#). Cada um desses três mantém só o ambiente: `Dockerfile`, `Makefile`, `compose.yaml`, `.devcontainer/`, `pom.xml`/`mvnw` ou `.sln`, `migrations/`, `contracts/`, `*.env.example` e README. Não existe `src/` nem `tests/`.
 - **Não crie código de negócio** nesses serviços sem pedido explícito. A lógica descrita neste arquivo e na `docs/` (saga, outbox, consumidores, `platform/` em Java) é o **alvo**, não o estado atual.
 - Sem `src/`, `docker build` e o `docker compose up` completo **quebram** nesses serviços; não os trate como regressão.
-- **CI:** os workflows dos quatro pulam os passos quando não há `src/` e voltam a rodar sozinhos quando ele existir.
-- **Volta do código C#:** descomente `payment-service` e `user-service` em `scripts/sync-shared.conf` e rode `scripts/sync-shared.sh` para regerar `Platform/`.
+- **CI:** os workflows dos três pulam os passos quando não há `src/` e voltam a rodar sozinhos quando ele existir.
+- **Volta do código C#:** o payment já voltou; para o user, descomente `user-service` em `scripts/sync-shared.conf` e rode `scripts/sync-shared.sh` para regerar `Platform/`.
 - **Volta do código Java (auth):** a fixture `src/test/resources/platform.sql` deve ser idêntica à de `shared/go/internal/testenv/` (`scripts/check-platform-ddl.sh`), e `scripts/check-java-platform.sh` deve passar: o `StandardJsonLogFormatter` do auth precisa receber a correção do order (`"duplicate":true` como boolean, p18).
 - Hoje o que responde pelo gateway é health, as rotas do gateway, o que os Go servem e `/orders*`; `/auth/*`, `/me*` e `/events*` dão 404/502 até os donos entregarem. A collection `docs/postman/` marca com ⏳ o que está pendente.
 
@@ -48,7 +49,7 @@ Os alvos `make` não aceitam filtro: chame a ferramenta da linguagem direto, com
 Testes dos scripts: `scripts/tests/sync-shared.test.sh`. Cenários de falha da demo: `scripts/f1-*.sh` … `scripts/f8-*.sh` (exigem a stack no ar).
 
 ## Arquitetura em uma tela
-_Descreve o desenho-alvo; os serviços Java e C# ainda não têm código (ver acima)._
+_Descreve o desenho-alvo; os serviços Java e o user ainda não têm código (ver acima)._
 - **Entrada única:** só o gateway publica porta; ele valida o JWT e injeta `X-User-Id`, e os demais serviços confiam só nesse header.
 - **Saga de compra orquestrada pelo order-service:** `PENDING → AWAITING_PAYMENT → CONFIRMED | CANCELLED`. Toda transição é `UPDATE ... WHERE id = ? AND status = <esperado>`, então evento duplicado ou fora de ordem não regride o estado. `PaymentApproved` para pedido já `CANCELLED` vira `RefundRequested` (status não muda).
 - **Publicar:** só pela tabela `outbox`, na mesma transação do efeito; um relay drena com backoff.
