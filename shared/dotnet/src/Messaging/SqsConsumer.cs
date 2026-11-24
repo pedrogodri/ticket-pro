@@ -145,10 +145,19 @@ public sealed partial class SqsConsumer
             return await PoisonAsync(message, new UnsupportedVersionException($"no handler for {envelope.Type} v{envelope.Version}"), ct);
         }
 
-        using var activity = TraceContext.Extract(TraceparentOf(message)) is { } parent
-            ? new Activity("consume " + envelope.Type).SetParentId(parent.TraceId, parent.SpanId, parent.TraceFlags).Start()
-            : null;
+        // ADR-0012: a consumer span in the producer's trace, linked to the producer span (as in shared/go).
+        using var activity = Spans.Consumer(TraceparentOf(message), envelope.Type, _options.QueueUrl, envelope.MessageId, _options.Name);
+        var outcome = await ApplyAsync(message, envelope, handler, ct);
+        if (outcome is ConsumeOutcome.Poison or ConsumeOutcome.Transient)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, outcome.ToString());
+        }
+        return outcome;
+    }
 
+    /// <summary>The transactional part of <see cref="ProcessAsync"/>: processed_messages, handler, commit, ack.</summary>
+    private async Task<ConsumeOutcome> ApplyAsync(Message message, Envelope envelope, IMessageHandler handler, CancellationToken ct)
+    {
         await using var connection = await TryOpenAsync(ct);
         if (connection is null)
         {
