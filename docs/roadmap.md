@@ -4,6 +4,18 @@
 
 Princípio: primeiro o **núcleo avaliado** (R1–R6, F1–F8 e os 3 elementos obrigatórios), depois os bônus. A falta de um bônus nunca pode derrubar a nota base. Cada fase termina num **checkpoint verificável**: comando, script ou teste verde, nunca "achamos que está pronto".
 
+## Situação em 24/11 (freeze)
+
+Order e inventory passaram para Java com o Felipe como dono do inventory ([ADR-0021](adr/0021-order-and-inventory-in-java.md)); as tabelas abaixo já usam esses donos.
+
+| Item | Situação |
+|---|---|
+| Serviços com código | gateway, notification, autoscaler (Go); payment (C#); order (Java, PR #23 em revisão) |
+| Serviços sem código | auth, inventory (Java); user (C#) |
+| order (F2/F3 do Matheus) | API, saga, deadline scanner, estorno tardio, retenção e tracing prontos no PR #23 ([RFC 0004](rfc/0004-camada-platform-em-java-para-order-e-inventory.md), [RFC 0005](rfc/0005-design-do-order-service-em-java.md)) |
+| Checkpoints F2 e F3 (`happy-path.sh`, `f1`…`f8`) | bloqueados: dependem do inventory |
+| Bônus | IaC entregue; `ORDER_CREATED_VERSION` pronto; trace único até `TicketsIssued` e roteiro v1/v2/v3 dependem do inventory |
+
 ## Visão geral
 
 | Fase | Datas | Entrega | Checkpoint |
@@ -53,7 +65,7 @@ Princípio: primeiro o **núcleo avaliado** (R1–R6, F1–F8 e os 3 elementos o
 | gateway: roteamento, JWT via JWKS, remoção/injeção de headers, correlation id | Pedro | ADR-0002 |
 | user: perfil por `UserRegistered`, `GET /me`, read model `GET /me/tickets` (CQRS) | Yasmin | bônus CQRS |
 | order: `POST /orders` (202 + `Idempotency-Key`), `GET /orders/{id}`, orquestração da saga | Matheus | R3 |
-| inventory: catálogo seed, `UPDATE` condicional, reservas, `TicketsIssued` | Pedro | R2 |
+| inventory: catálogo seed, `UPDATE` condicional, reservas, `TicketsIssued` | Felipe (ADR-0021) | R2 |
 | payment: consumidor + worker com lease, provedor simulado configurável | Gabriel | R5 |
 | notification: consome `TicketsIssued`/`OrderCancelled`, comprovante no S3 | Pedro + Matheus | 2+ consumidores |
 | Réplicas ×2 (order, inventory, payment) no compose | Matheus | R4 |
@@ -69,7 +81,7 @@ Princípio: primeiro o **núcleo avaliado** (R1–R6, F1–F8 e os 3 elementos o
 | Tarefa | Dono | Cenário |
 |---|---|---|
 | order: `PaymentFailed` → `OrderCancelled`; deadline scanner; `InventoryReservationExpired`; estorno tardio | Matheus | F1, F7 |
-| inventory: liberação idempotente, job de expiração, validação de TTL × deadline no boot | Pedro | F1 |
+| inventory: liberação idempotente, job de expiração, validação de TTL × deadline no boot | Felipe (ADR-0021) | F1 |
 | payment: `RefundRequested` → `PaymentRefunded`; timeout duro | Gabriel | F7 |
 | Consumidores: classificação venenosa/transitória, visibility backoff | cada dono | F4 |
 | auth/user: `UserCreationFailed` → compensação do cadastro; logout → `TokenRevoked` → Redis do gateway | Felipe, Yasmin, Pedro | — |
@@ -86,7 +98,7 @@ Princípio: primeiro o **núcleo avaliado** (R1–R6, F1–F8 e os 3 elementos o
 | 1 | CQRS | Entregue na F2 | Nenhuma | Yasmin |
 | 2 | IaC | Entregue na F0 | Nenhuma | Matheus |
 | 3 | OpenTelemetry | Propagação na F1 | Spans de consumer/producer linkados, auto-instrumentação de HTTP/DB, verificar trace completo no Jaeger | todos |
-| 4 | Versionamento | Schemas v1/v2 prontos | Upcaster v1→v2 no inventory, `ORDER_CREATED_VERSION`, roteiro v1/v2/v3→DLQ | Pedro, Matheus |
+| 4 | Versionamento | Schemas v1/v2 prontos | Upcaster v1→v2 no inventory, `ORDER_CREATED_VERSION`, roteiro v1/v2/v3→DLQ | Felipe (upcaster e roteiro), Matheus (`ORDER_CREATED_VERSION`) |
 | 5 | Autoescala | — | `services/autoscaler` (ADR-0015) + demo com fila acumulada | Pedro |
 
 **Linha de corte:** se o checkpoint F3 não estiver verde até **dom 22/11 às 12h**, a F4 começa por F3 pendente, e os bônus 5 e 4 (nessa ordem) são os primeiros cortados.

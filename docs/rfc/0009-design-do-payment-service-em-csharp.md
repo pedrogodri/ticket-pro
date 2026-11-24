@@ -1,6 +1,6 @@
 # RFC 0009 — Design do payment-service em C#
 
-- **Status:** 📝 Draft (serviço funcional; este RFC fixa o estado verificado e os ajustes restantes, nas tarefas do [plano](../superpowers/plans/2026-11-19-payment-service.md))
+- **Status:** 🚧 In progress (24/11/2026: P01, P02, P05 e P06 do [plano](../superpowers/plans/2026-11-19-payment-service.md) entregues no PR #22, mergeado; P03 (lease explícito no `f7-late-response.sh`) no PR #23. Verificado ao vivo por `scripts/payment-check.sh`, e F1 e F7 entre order e payment passaram com o `InventoryReserved` publicado à mão. Falta P04: `f1`, `f7` e `f8` com o inventory de verdade)
 - **Scope:** O `payment-service` (C#, .NET 10): consumidores de `PaymentRequested` e `RefundRequested`, worker com lease, provedor simulado instável (R5), estorno e a configuração `PAYMENT_*`. Documenta o que existe, a semântica de falha e **quatro lacunas pequenas** (correlationId do worker, validação cruzada de lease × timeout, README e o env do F7). **Sem mudança de contrato; sem migration obrigatória.** Não cobre o order (RFC 0005).
 - **Related:** [RFC 0003 §5.1, §5.4, §5.6, §5.7](0003-failure-handling-strategy.md), [ADR-0005](../adr/0005-transactional-outbox.md), [ADR-0006](../adr/0006-idempotent-consumers-processed-messages.md), [arquitetura §6](../arquitetura.md), [`services/payment-service/`](../../services/payment-service/README.md), [`contracts/events/PaymentApproved`](../../contracts/events/PaymentApproved/v1.schema.json), [`contracts/events/RefundRequested`](../../contracts/events/RefundRequested/v1.schema.json), [`scripts/f1-compensation.sh`](../../scripts/f1-compensation.sh), [`scripts/f7-late-response.sh`](../../scripts/f7-late-response.sh)
 
@@ -136,9 +136,12 @@ Retry de cobrança, provedor real, estorno parcial, limpeza de `provider_charges
 |---|---|---|
 | 1 | `LOCKED` | Sem retry automático de cobrança; falha ou timeout compensa e aprovação tardia estorna (RFC 0003, Decisão 3). |
 | 2 | `ASSUMED` | `PAYMENT_WORKER_LEASE_MS > PAYMENT_PROVIDER_TIMEOUT_MS` passa a ser validado no boot (§5.5). |
-| 3 | `OPEN` | `correlationId` do pedido no worker: migration `V0006` com `payments.correlation_id` ou aceitar trace solto. Decidir ao implementar; custo de uma coluna nullable é mínimo. |
+| 3 | `OPEN` | **Substituída pela #6.** `correlationId` do pedido no worker: migration `V0006` com `payments.correlation_id` ou aceitar trace solto. Decidir ao implementar; custo de uma coluna nullable é mínimo. |
 | 4 | `ASSUMED` | `RefundRequested` para pagamento não `APPROVED` continua `Stale` (ack sem efeito), com teste que fixa o comportamento. |
 | 5 | `ASSUMED` | O estorno simulado nunca falha (RFC 0003 §5.6). |
+| 6 | `ASSUMED` | Resolve a #3: `V0006` adiciona `payments.correlation_id` (nullable); o consumidor grava o do `PaymentRequested` e o worker o usa no `PaymentApproved`/`PaymentFailed`, com UUID novo só para linhas anteriores à migration. Ver commit `2b671a0` (PR #22). |
+| 7 | `ASSUMED` | Responde à segunda questão da §10: o `f7-late-response.sh` passa `PAYMENT_WORKER_LEASE_MS = latência + 20000` (timeout = latência + 10000), senão a validação da #2 impede o payment de subir no cenário. O mesmo vale para o passo 1 do F7 na collection do Postman. |
+| 8 | `ASSUMED` | Tracing (ADR-0012, bônus OTel): o `shared/dotnet` 0.2.0 cria os spans de consumer, producer e `Child` via `ActivitySource`, sem dependência nova; o SDK e o exportador OTLP ficam no serviço (`App/Tracing.cs`), ligados só com `OTEL_EXPORTER_OTLP_ENDPOINT`. O worker continua o trace do `PaymentRequested` por `payments.traceparent` (`V0007`), e o `QuietPollingSampler` descarta spans `Client` sem pai (polling). |
 
 ## 12. Phasing
 

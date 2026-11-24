@@ -113,8 +113,9 @@ CORS, TLS, rotação de chave automática (o gateway já tolera `previous` no JW
 | 2 | `LOCKED` | Headers de identidade do cliente são sempre removidos e reinjetados. |
 | 3 | `ASSUMED` | `POST /auth/refresh` é pública (o RFC 0002 §5.5 já a lista); a lista pública é um mapa explícito, com teste. |
 | 4 | `ASSUMED` | `golang-jwt/jwt/v5` fecha a Decisão 8 do RFC 0002. |
-| 5 | `OPEN` | JWKS indisponível: 401 (atual) ou 503. |
+| 5 | `OPEN` | **Substituída pela #7.** JWKS indisponível: 401 (atual) ou 503. |
 | 6 | `ASSUMED` | Sem CORS enquanto não houver frontend. |
+| 7 | `ASSUMED` | Resolve a #5 (24/11, Pedro): com o JWKS indisponível, as rotas protegidas **continuam respondendo 401**, e o log diz por quê. Sem mudança de comportamento no freeze. Responder 503 distinguiria falha de infraestrutura de token inválido e fica como melhoria futura (tarefa G05 do plano). |
 
 ## 12. Phasing
 

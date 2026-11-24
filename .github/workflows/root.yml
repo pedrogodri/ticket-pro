@@ -33,6 +33,10 @@ jobs:
         run: scripts/tests/sync-shared.test.sh
       - name: Platform DDL has not drifted (migrations and fixtures)
         run: scripts/check-platform-ddl.sh
+      - name: Test the Java platform drift check
+        run: scripts/tests/check-java-platform.test.sh
+      - name: Java platform copies have not drifted (ADR-0022)
+        run: scripts/check-java-platform.sh
       - name: Vendored copies match their sources (ADR-0017)
         run: scripts/sync-shared.sh --check
 

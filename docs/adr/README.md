@@ -26,3 +26,4 @@ Formato: [MADR](https://adr.github.io/madr/). ADRs são imutáveis: para mudar u
 | [0020](0020-database-roles-and-data-networks.md) | Roles de banco owner/app/worker e rede de dados isolada por serviço | Aceito |
 | [0021](0021-order-and-inventory-in-java.md) | order-service e inventory-service em Java | Aceito |
 | [0022](0022-java-platform-copied-from-auth-with-drift-check.md) | Plataforma Java copiada do auth-service, com checagem de deriva | Aceito |
+| [0023](0023-internal-architecture-chosen-per-service.md) | Arquitetura interna escolhida por serviço, sem princípio comum | Aceito |

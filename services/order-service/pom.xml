@@ -14,13 +14,27 @@
 	<artifactId>order-service</artifactId>
 	<version>0.1.0</version>
 	<name>order-service</name>
-	<description>Ticket Pro order-service (ADR-0021). DevOps scaffold only: business logic and platform/ are not implemented yet.</description>
+	<description>Ticket Pro order-service: async order API and purchase saga orchestrator (RFC 0005).</description>
 
 	<properties>
 		<java.version>21</java.version>
 		<spotless.version>3.11.0</spotless.version>
 		<google-java-format.version>2.0.0</google-java-format.version>
+		<awssdk.version>2.57.6</awssdk.version>
+		<json-schema-validator.version>3.0.8</json-schema-validator.version>
 	</properties>
+
+	<dependencyManagement>
+		<dependencies>
+			<dependency>
+				<groupId>software.amazon.awssdk</groupId>
+				<artifactId>bom</artifactId>
+				<version>${awssdk.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
+		</dependencies>
+	</dependencyManagement>
 
 	<dependencies>
 		<dependency>
@@ -28,9 +42,52 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 
+		<!-- Platform layer (RFC 0004), same versions as the auth-service (ADR-0018, ADR-0022). -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-jdbc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>sns</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>software.amazon.awssdk</groupId>
+			<artifactId>sqs</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.networknt</groupId>
+			<artifactId>json-schema-validator</artifactId>
+			<version>${json-schema-validator.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.opentelemetry</groupId>
+			<artifactId>opentelemetry-api</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- In-memory SDK for the span tests (ADR-0012); at runtime the OTel agent provides the SDK. -->
+		<dependency>
+			<groupId>io.opentelemetry</groupId>
+			<artifactId>opentelemetry-sdk</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.opentelemetry</groupId>
+			<artifactId>opentelemetry-sdk-testing</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

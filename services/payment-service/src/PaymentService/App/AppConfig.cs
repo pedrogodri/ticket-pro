@@ -50,6 +50,9 @@ public sealed record AppConfig
     public required TimeSpan PaymentWorkerLease { get; init; }
     public required TimeSpan PaymentWorkerPoll { get; init; }
 
+    /// <summary>OTEL_EXPORTER_OTLP_ENDPOINT (http/https with a scheme, divergence D3); null turns tracing off.</summary>
+    public Uri? OtlpEndpoint { get; init; }
+
     /// <summary>Reads and validates the configuration; <paramref name="env"/> is usually Environment.GetEnvironmentVariable.</summary>
     /// <exception cref="ConfigException">The first invalid or missing variable.</exception>
     public static AppConfig Load(Func<string, string?> env)
@@ -80,6 +83,7 @@ public sealed record AppConfig
             PaymentProviderTimeout = Millis(env, "PAYMENT_PROVIDER_TIMEOUT_MS", 8000, 1),
             PaymentWorkerLease = Millis(env, "PAYMENT_WORKER_LEASE_MS", 30000, 1),
             PaymentWorkerPoll = Millis(env, "PAYMENT_WORKER_POLL_MS", 200, 1),
+            OtlpEndpoint = HttpUri(env, "OTEL_EXPORTER_OTLP_ENDPOINT"),
         };
         // RFC 0003 §5.1: a lease shorter than the provider timeout would let a second worker take a
         // payment whose charge is still running.
@@ -141,6 +145,18 @@ public sealed record AppConfig
         {
             throw new ConfigException($"{name}: {e.Message}", e);
         }
+    }
+
+    private static Uri? HttpUri(Func<string, string?> env, string name)
+    {
+        var raw = Optional(env, name);
+        if (raw is null)
+        {
+            return null;
+        }
+        return Uri.TryCreate(raw, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https"
+            ? uri
+            : throw new ConfigException($"{name}: must be an http(s) URL with the scheme, e.g. http://otel-collector:4317, got '{raw}'");
     }
 
     private static string Arn(Func<string, string?> env, string name)

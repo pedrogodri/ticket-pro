@@ -19,7 +19,8 @@ services:
       order-service-migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/live >/dev/null || exit 1"]
+      # The unsampled traceparent (flags 00) keeps health checks out of Jaeger (ADR-0012).
+      test: ["CMD-SHELL", "wget -qO- --header 'traceparent: 00-00000000000000000000000000000001-0000000000000001-00' http://127.0.0.1:8080/health/live >/dev/null || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 20

@@ -17,7 +17,7 @@ public sealed partial class PaymentWorker(
     NpgsqlDataSource db, IPaymentProvider provider, AppConfig config, ILogger<PaymentWorker> logger)
     : BackgroundService
 {
-    internal sealed record ClaimedPayment(Guid Id, Guid OrderId, long AmountCents, string Currency, string CorrelationId);
+    internal sealed record ClaimedPayment(Guid Id, Guid OrderId, long AmountCents, string Currency, string CorrelationId, string? Traceparent);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -68,7 +68,7 @@ public sealed partial class PaymentWorker(
                              ORDER BY created_at
                              LIMIT $2
                              FOR UPDATE SKIP LOCKED)
-            RETURNING p.id, p.order_id, p.amount_cents, p.currency, p.correlation_id
+            RETURNING p.id, p.order_id, p.amount_cents, p.currency, p.correlation_id, p.traceparent
             """);
         cmd.Parameters.Add(new NpgsqlParameter { Value = (long)config.PaymentWorkerLease.TotalMilliseconds });
         // Batch = CONSUMER_CONCURRENCY on purpose: it is the "how much work in parallel per replica" knob
@@ -80,13 +80,19 @@ public sealed partial class PaymentWorker(
         {
             // correlation_id is NULL only for rows written before V0006; start a new correlation then.
             var correlationId = reader.IsDBNull(4) ? Guid.CreateVersion7() : reader.GetGuid(4);
-            claimed.Add(new ClaimedPayment(reader.GetGuid(0), reader.GetGuid(1), reader.GetInt64(2), reader.GetString(3), correlationId.ToString()));
+            claimed.Add(new ClaimedPayment(reader.GetGuid(0), reader.GetGuid(1), reader.GetInt64(2), reader.GetString(3), correlationId.ToString(),
+                reader.IsDBNull(5) ? null : reader.GetString(5)));
         }
         return claimed;
     }
 
     private async Task ChargeAsync(ClaimedPayment payment, CancellationToken stoppingToken)
     {
+        // ADR-0012: continue the trace of the PaymentRequested that created the row, so the
+        // PaymentApproved/PaymentFailed written below stays in the saga's trace.
+        using var activity = Spans.Child("charge payment", payment.Traceparent);
+        activity?.SetTag("payment.id", payment.Id.ToString());
+        activity?.SetTag("order.id", payment.OrderId.ToString());
         using var scope = logger.BeginScope(new Dictionary<string, object?>
         {
             ["correlationId"] = payment.CorrelationId,

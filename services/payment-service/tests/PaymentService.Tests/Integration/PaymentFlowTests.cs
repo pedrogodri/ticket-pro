@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
@@ -83,6 +84,26 @@ public sealed class PaymentFlowTests(PaymentsDatabase db) : IAsyncLifetime
         Assert.Equal(Guid.Parse(Correlation), await db.ScalarAsync<Guid>("SELECT correlation_id FROM payments WHERE order_id = $1", orderId));
         Assert.Equal(0L, await db.ScalarAsync<long>("SELECT count(*) FROM provider_charges"));
         Assert.Empty(await OutboxAsync());
+    }
+
+    /// <summary>ADR-0012: the worker charges later, outside the message, but stays in the trace the
+    /// PaymentRequested brought (payments.traceparent, V0007), so PaymentApproved continues it.</summary>
+    [Fact]
+    public async Task Worker_continues_the_trace_of_the_PaymentRequested()
+    {
+        const string traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+        var orderId = Guid.CreateVersion7();
+        using (new Activity("process PaymentRequested")
+            .SetParentId(ActivityTraceId.CreateFromString(traceId), ActivitySpanId.CreateFromString("00f067aa0ba902b7"), ActivityTraceFlags.Recorded)
+            .Start())
+        {
+            await RequestAsync(orderId);
+        }
+        Assert.StartsWith($"00-{traceId}-", await db.ScalarAsync<string>("SELECT traceparent FROM payments WHERE order_id = $1", orderId), StringComparison.Ordinal);
+
+        Assert.Equal(1, await Worker(Config(failureRate: "0")).RunOnceAsync(CancellationToken.None));
+
+        Assert.StartsWith($"00-{traceId}-", await db.ScalarAsync<string>("SELECT traceparent FROM outbox WHERE type = 'PaymentApproved'"), StringComparison.Ordinal);
     }
 
     [Fact]

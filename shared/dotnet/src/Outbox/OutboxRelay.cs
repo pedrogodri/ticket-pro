@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -42,7 +43,7 @@ public sealed partial class OutboxRelay(NpgsqlDataSource dataSource, IOutboxPubl
             var row = rows[i];
             try
             {
-                await publisher.PublishAsync(row.TopicArn, row.Envelope, row.Traceparent, ct);
+                await PublishAsync(row, ct);
             }
             catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
             {
@@ -66,6 +67,23 @@ public sealed partial class OutboxRelay(NpgsqlDataSource dataSource, IOutboxPubl
             LogPublished(logger, row.Envelope.MessageId, row.Envelope.Type, row.Envelope.Version, row.Envelope.CorrelationId);
         }
         return published;
+    }
+
+    /// <summary>Publishes one row inside a producer span that continues the trace stored with the row, and
+    /// propagates that span as the message traceparent (ADR-0012, as in shared/go). Without a listener the
+    /// stored traceparent goes out unchanged.</summary>
+    private async Task PublishAsync(Row row, CancellationToken ct)
+    {
+        using var activity = Spans.Producer(row.Traceparent, row.Envelope.Type, row.TopicArn, row.Envelope.MessageId);
+        try
+        {
+            await publisher.PublishAsync(row.TopicArn, row.Envelope, activity is null ? row.Traceparent : TraceContext.Inject(), ct);
+        }
+        catch (Exception e)
+        {
+            activity?.SetStatus(ActivityStatusCode.Error, e.Message);
+            throw;
+        }
     }
 
     /// <summary>Publishes until cancelled: PollInterval between batches, backoff after failures.</summary>

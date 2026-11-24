@@ -20,10 +20,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/ticketpro/notification-service/internal/app"
-	"github.com/ticketpro/notification-service/internal/modules/receipts"
 	"github.com/ticketpro/notification-service/internal/platform/envelope"
 	"github.com/ticketpro/notification-service/internal/platform/logging"
 	"github.com/ticketpro/notification-service/internal/platform/messaging"
+	"github.com/ticketpro/notification-service/internal/receipts"
 )
 
 func main() {

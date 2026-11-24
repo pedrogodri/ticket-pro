@@ -32,7 +32,7 @@ O serviço não tem API de negócio, só eventos.
 
 ## Dados
 
-O banco é `payments`, no container `payments-db`. Tabelas: `payments` (`order_id UNIQUE`; `correlation_id` desde a V0006), `refunds` (`payment_id UNIQUE`), `provider_charges` (memória do provedor simulado, idempotência por `paymentId`), `outbox` e `processed_messages`.
+O banco é `payments`, no container `payments-db`. Tabelas: `payments` (`order_id UNIQUE`; `correlation_id` desde a V0006; `traceparent` desde a V0007), `refunds` (`payment_id UNIQUE`), `provider_charges` (memória do provedor simulado, idempotência por `paymentId`), `outbox` e `processed_messages`.
 
 ## Código
 
@@ -78,10 +78,22 @@ O banco é `payments`, no container `payments-db`. Tabelas: `payments` (`order_i
 | `PAYMENT_PROVIDER_TIMEOUT_MS` | não | 8000: timeout duro → `FAILED(PROVIDER_TIMEOUT)`, sem retry |
 | `PAYMENT_WORKER_LEASE_MS` | não | 30000: **precisa ser maior** que `PAYMENT_PROVIDER_TIMEOUT_MS`, senão o serviço não sobe |
 | `PAYMENT_WORKER_POLL_MS` | não | 200: intervalo do worker quando não há `PENDING` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | não | `http://otel-collector:4317` (com esquema): liga o tracing; sem ela, nada é exportado |
 
 Toda variável é validada no boot: valor inválido impede a subida com `invalid configuration: <VARIÁVEL>: ...`.
 
 O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, só desenvolvimento). `src/PaymentService/Platform/` e `contracts/` são cópias geradas por `scripts/sync-shared.sh`: não edite.
+
+## Observabilidade
+
+Com `OTEL_EXPORTER_OTLP_ENDPOINT` definida, o serviço exporta traces por OTLP gRPC para o collector ([ADR-0012](../../docs/adr/0012-opentelemetry-tracing.md)):
+
+- `process PaymentRequested` / `process RefundRequested` (consumer): continuam o trace do order, com link para o produtor. Vêm do `Platform/`.
+- `charge payment` (internal): o worker cobra depois, fora da mensagem, mas continua o mesmo trace pelo `payments.traceparent` (V0007).
+- `publish PaymentApproved|PaymentFailed|PaymentRefunded` (producer): no relay; o `traceparent` da mensagem passa a ser o deste span.
+- As queries Npgsql dentro desses spans.
+
+O `QuietPollingSampler` descarta spans `Client` sem pai, ou seja, as queries de polling do worker e do relay, para o Jaeger não encher.
 
 ## Comandos
 
@@ -92,5 +104,7 @@ make lint        # dotnet format --verify-no-changes
 make typecheck   # build com warnings como erro
 make run         # sobe só este serviço
 ```
+
+Com a stack no ar, `scripts/payment-check.sh` (na raiz) verifica o serviço sozinho, sem order nem inventory: publica `PaymentRequested`/`RefundRequested` e confere aprovação, idempotência, estorno único, `DECLINED` e timeout duro.
 
 Sem o .NET SDK instalado, os alvos rodam sozinhos no container `mcr.microsoft.com/dotnet/sdk:10.0`. Para forçar: `make test TOOLCHAIN=docker`. Também há um Dev Container em [`.devcontainer/`](.devcontainer/devcontainer.json).

@@ -10,6 +10,9 @@
     <PackageReference Include="AWSSDK.SQS" Version="4.0.100.21" />
     <PackageReference Include="JsonSchema.Net" Version="9.5.0" />
     <PackageReference Include="Npgsql" Version="10.0.3" />
+    <!-- Tracing (ADR-0012): SDK + OTLP exporter, on only when OTEL_EXPORTER_OTLP_ENDPOINT is set. -->
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.21.0" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.21.0" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="PaymentService.Tests" />

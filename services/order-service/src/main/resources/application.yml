@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: ${SERVICE_NAME:order-service}
+  main:
+    banner-mode: off
+  # Java 21: HTTP requests run on virtual threads, like the consumer, relay and job runners.
+  threads:
+    virtual:
+      enabled: true
+  jackson:
+    deserialization:
+      # padroes §4: unknown fields in a request body are rejected with 400.
+      fail-on-unknown-properties: true
+
+server:
+  port: ${PORT:8080}
+  shutdown: graceful
+
+logging:
+  level:
+    root: ${LOG_LEVEL:info}
+  structured:
+    format:
+      console: br.furb.ticketpro.order.platform.logging.StandardJsonLogFormatter

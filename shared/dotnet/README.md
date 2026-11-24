@@ -14,7 +14,7 @@ O contrato, igual nas 3 linguagens, está na seção *Platform contract* de [`do
 |---|---|
 | `Retry` | `Backoff.Delay`: full jitter, RFC 0003 §5.2 |
 | `Envelope` | `Envelope`, `EnvelopeJson` (`Serialize`, `Unwrap`, `RawEnvelope`), `ContractValidator` e as exceções `PoisonMessageException` ← `UnsupportedVersionException`/`InvalidMessageException`, `StaleEventException` |
-| `Tracing` | `TraceContext.Inject`/`Extract` (W3C `traceparent`) |
+| `Tracing` | `TraceContext.Inject`/`Extract` (W3C `traceparent`); `Spans` (`ActivitySource` `TicketPro.Platform`): `Consumer`, `Producer` e `Child`, iguais aos spans do `shared/go`. O serviço registra `Spans.SourceName` no seu `TracerProvider`; sem SDK nada é gravado e o `traceparent` continua propagando |
 | `Logging` | `StandardJsonConsoleFormatter`: padrões §5, com `correlationId` vindo dos scopes e `traceId`/`spanId` vindos da `Activity` |
 | `Idempotency` | `ProcessedMessages.RecordAsync` |
 | `Outbox` | `OutboxWriter.EnqueueAsync`, `IOutboxPublisher`, `OutboxRelay` + `OutboxRelayOptions` |

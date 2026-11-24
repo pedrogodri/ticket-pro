@@ -21,18 +21,21 @@ Infra: MiniStack (`AWS_ENDPOINT_URL=http://ministack:4566`), SNS→SQS+DLQ, S3, 
 | Testes de integração | `cd services/<svc> && make test-integration` |
 | Sincronizar libs/contratos vendorizados | `scripts/sync-shared.sh` (CI: `--check`) |
 | Verificar infra AWS / bancos / portas / autonomia | `scripts/verify-infra.sh`, `scripts/verify-platform.sh`, `scripts/check-ports.sh`, `scripts/check-autonomy.sh services/<svc>` |
+| Deriva da `platform/` Java entre auth, order e inventory (ADR-0022) | `scripts/check-java-platform.sh` (testes: `scripts/tests/check-java-platform.test.sh`) |
 | Testes das libs de plataforma | `make -C shared/go test test-integration`, `make -C shared/dotnet test test-integration` |
 
 Todos os serviços têm `Makefile`, `Dockerfile` e `.devcontainer/`. Sem o SDK no PATH, o `make` roda no container da linguagem (`TOOLCHAIN=docker`). Bancos: `<db>-db` + job `<svc>-migrate` (Flyway); credenciais de owner só em `db.env.example`.
 
+`order-service` (Java) tem código: `platform/` (copiada do auth, ADR-0022), API e saga (RFC 0005).
+
 ### Serviços sem código (Java e C#)
-**Sem código hoje:** auth, order, inventory (Java) e user (C#). Os donos implementam todo o código; têm código os serviços Go (gateway, notification, autoscaler) e o payment (C#). Cada um desses quatro mantém só o ambiente: `Dockerfile`, `Makefile`, `compose.yaml`, `.devcontainer/`, `pom.xml`/`mvnw` ou `.sln`, `migrations/`, `contracts/`, `*.env.example` e README. Não existe `src/` nem `tests/`.
+**Sem código hoje:** auth e inventory (Java) e user (C#). Os donos implementam todo o código; têm código os serviços Go (gateway, notification, autoscaler), o order (Java) e o payment (C#). Cada um desses três mantém só o ambiente: `Dockerfile`, `Makefile`, `compose.yaml`, `.devcontainer/`, `pom.xml`/`mvnw` ou `.sln`, `migrations/`, `contracts/`, `*.env.example` e README. Não existe `src/` nem `tests/`.
 - **Não crie código de negócio** nesses serviços sem pedido explícito. A lógica descrita neste arquivo e na `docs/` (saga, outbox, consumidores, `platform/` em Java) é o **alvo**, não o estado atual.
 - Sem `src/`, `docker build` e o `docker compose up` completo **quebram** nesses serviços; não os trate como regressão.
-- **CI:** os workflows dos quatro pulam os passos quando não há `src/` e voltam a rodar sozinhos quando ele existir.
+- **CI:** os workflows dos três pulam os passos quando não há `src/` e voltam a rodar sozinhos quando ele existir.
 - **Volta do código C#:** o payment já voltou; para o user, descomente `user-service` em `scripts/sync-shared.conf` e rode `scripts/sync-shared.sh` para regerar `Platform/`.
-- **Volta do código Java (auth):** a fixture `src/test/resources/platform.sql` deve ser idêntica à de `shared/go/internal/testenv/` (`scripts/check-platform-ddl.sh`).
-- Hoje o que responde pelo gateway é só health, as rotas do gateway e o que os Go servem; `/auth/*`, `/me*`, `/events*` e `/orders*` dão 404/502 até os donos entregarem. A collection `docs/postman/` marca com ⏳ o que está pendente.
+- **Volta do código Java (auth):** a fixture `src/test/resources/platform.sql` deve ser idêntica à de `shared/go/internal/testenv/` (`scripts/check-platform-ddl.sh`), e `scripts/check-java-platform.sh` deve passar: o `StandardJsonLogFormatter` do auth precisa receber a correção do order (`"duplicate":true` como boolean, p18).
+- Hoje o que responde pelo gateway é health, as rotas do gateway, o que os Go servem e `/orders*`; `/auth/*`, `/me*` e `/events*` dão 404/502 até os donos entregarem. A collection `docs/postman/` marca com ⏳ o que está pendente.
 
 ### Rodar um único teste
 Os alvos `make` não aceitam filtro: chame a ferramenta da linguagem direto, com o SDK local (ou dentro do Dev Container do serviço).
@@ -43,7 +46,7 @@ Os alvos `make` não aceitam filtro: chame a ferramenta da linguagem direto, com
 | Java | `./mvnw test -Dtest=Classe#metodo` | rodam no `./mvnw verify` |
 | C# | `dotnet test --filter "FullyQualifiedName~Nome&Category!=Integration"` | `--filter "Category=Integration"` (`[Trait("Category", "Integration")]`) |
 
-Testes dos scripts: `scripts/tests/sync-shared.test.sh`. Cenários de falha da demo: `scripts/f1-*.sh` … `scripts/f8-*.sh` (exigem a stack no ar).
+Testes dos scripts: `scripts/tests/sync-shared.test.sh`. Cenários de falha da demo: `scripts/f1-*.sh` … `scripts/f8-*.sh` (exigem a stack no ar). Checagens ao vivo de um serviço sozinho: `scripts/gateway-check.sh`, `scripts/payment-check.sh`, `scripts/notification-check.sh`.
 
 ## Arquitetura em uma tela
 _Descreve o desenho-alvo; os serviços Java e o user ainda não têm código (ver acima)._
@@ -81,6 +84,7 @@ _Descreve o desenho-alvo; os serviços Java e o user ainda não têm código (ve
 ## Always
 - Mensagem nova ou alterada: schema + exemplo + `contracts/asyncapi.yaml` + `make -C contracts check` + `scripts/sync-shared.sh`, no mesmo PR.
 - Decisão arquitetural nova: ADR em `docs/adr/` (ADR aceito não se edita; substitua).
+- Estrutura interna é livre por serviço (ADR-0023): siga a do serviço que você está mexendo e, ao criar ou mudar a estrutura, registre a escolha e o motivo no README dele. O contrato externo e os caminhos de plataforma, `migrations/` e `contracts/` continuam fixos.
 - Mudança de schema de banco: migration Flyway em `services/<svc>/migrations/`.
 - Commits Conventional com escopo da pasta: `feat(order-service): ...`, `chore(shared): sync ...`.
 - Antes de dizer que está pronto: rodar lint, typecheck e testes do serviço e relatar falhas.

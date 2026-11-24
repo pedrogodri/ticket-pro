@@ -1,6 +1,6 @@
 # RFC 0004 — Camada platform em Java para order e inventory
 
-- **Status:** 📝 Draft (design fechado — implementação nas tarefas T01–T04 do [plano](../superpowers/plans/2026-11-19-java-order-inventory.md))
+- **Status:** 🚧 In progress (24/11/2026: P1–P4 implementadas no `order-service`, branch `feat/order-service`, PR #23 ainda não mergeado: T01–T04 e a parte Java de T14; falta copiar o `platform/` para o inventory, que ainda não tem código, e o auth adotar a correção do logger quando o código dele voltar — [plano](../superpowers/plans/2026-11-19-java-order-inventory.md))
 - **Scope:** O pacote `platform/` dos dois serviços Java que hoje são só scaffold (`order-service`, `inventory-service`): envelope, consumo SQS com ack após commit, outbox com relay e backoff, idempotência, retry/DLQ, jobs periódicos, dois roles de banco (app com RLS, worker com `BYPASSRLS`), health, logs e OTel. O ponto de partida é o `platform/` que o `auth-service` **já tem funcionando** (cópia com adaptações, não reescrita). Não cobre regra de negócio (RFC 0005 e 0006), formato do envelope (RFC 0001) nem a estratégia de falhas (RFC 0003). **Sem mudança de contrato** em `contracts/`.
 - **Related:** [ADR-0005](../adr/0005-transactional-outbox.md), [ADR-0006](../adr/0006-idempotent-consumers-processed-messages.md), [ADR-0017](../adr/0017-vendored-platform-libraries-and-contracts.md), [ADR-0020](../adr/0020-database-roles-and-data-networks.md), [ADR-0021](../adr/0021-order-and-inventory-in-java.md), [ADR-0022](../adr/0022-java-platform-copied-from-auth-with-drift-check.md) (proposto), [RFC 0001](0001-message-contract-and-event-versioning.md), [RFC 0003](0003-failure-handling-strategy.md), [plano F1 — *Platform contract*](../superpowers/plans/2026-11-12-f1-platform.md), [`services/auth-service/.../platform/`](../../services/auth-service/src/main/java/br/furb/ticketpro/auth/platform/messaging/SqsConsumer.java), [`padroes.md` §2.2, §6, §7](../padroes.md)
 
@@ -193,8 +193,11 @@ README de cada serviço (comandos, variáveis, eventos); `docs/padroes.md` §2.2
 | 6 | `ASSUMED` | `SqsConsumerRunner` e `PeriodicJobRunner` são `SmartLifecycle` com virtual threads, no mesmo molde do `OutboxRelayRunner`. |
 | 7 | `ASSUMED` | `messageId` e IDs de domínio são UUID v4 (o JDK não tem v7; RFC 0001 decisão 8 e os schemas aceitam os dois). |
 | 8 | `ASSUMED` | A retenção usa `OUTBOX_RETENTION_H=24` e `PROCESSED_MESSAGES_RETENTION_D=7`. É a primeira tarefa a cortar sob pressão de prazo; o custo é só crescimento de tabela na demo. |
-| 9 | `OPEN` | Estratégia de tracing: agente OTel Java (HTTP/JDBC) + spans manuais de consumer/producer. Quem implementar T14 pode trocar por SDK embutido se o agente não funcionar contra o Collector, e registra o motivo. |
+| 9 | `OPEN` | **Substituída pela #11.** Estratégia de tracing: agente OTel Java (HTTP/JDBC) + spans manuais de consumer/producer. Quem implementar T14 pode trocar por SDK embutido se o agente não funcionar contra o Collector, e registra o motivo. |
 | 10 | `OPEN` | Tamanho do pool worker e `SQS_VISIBILITY_TIMEOUT_S` finais (ponto de partida: concorrência + 4 e 30 s). |
+| 11 | `ASSUMED` | Resolve a #9 (T14): agente OTel Java 2.34.0 (versão e sha256 fixados, carregado só com `OTEL_EXPORTER_OTLP_ENDPOINT`, gRPC com esquema) + `tracing/Spans` com spans de consumer e producer iguais aos do `shared/go`. Os laços de polling (relay, consumidor, jobs) rodam sob contexto não amostrado e o health check manda `traceparent` com flag `00`: sem isso o agente exportava ~730 traces de fundo por minuto. Sem o agente, o `traceparent` gravado passa adiante sem mudança (responde à primeira questão da §10). Ver commit `6c00feb` (PR #23). |
+| 12 | `ASSUMED` | A retenção (#8) roda a cada `RETENTION_INTERVAL_MS` (60000) e apaga até `RETENTION_BATCH_SIZE` (500) linhas por tabela por TX; a RFC não nomeava essas variáveis. Ver commit `7a4487e` (PR #23). |
+| 13 | `ASSUMED` | `check-java-platform.sh` só falha com classe **divergente** presente em duas ou mais árvores; classe numa só árvore (código novo da plataforma, ADR-0022) é apenas listada, e serviço sem `platform/` é pulado. Ver commit `a10d069` (PR #23). |
 
 ## 12. Phasing
 

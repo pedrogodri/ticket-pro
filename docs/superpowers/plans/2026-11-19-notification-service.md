@@ -78,7 +78,7 @@ N01 ─ N02 ─ N03 ─(happy-path.sh depende de T07/T10 do PR #13 para o objeto
 ### N02 (Should): IT contra o MiniStack
 
 - **Owner:** Pedro. **Depende de:** N01.
-- **Files:** `internal/modules/receipts/receipts_integration_test.go` (ou novo arquivo `*_integration_test.go` com `-tags integration`).
+- **Files:** `internal/receipts/receipts_integration_test.go` (ou novo arquivo `*_integration_test.go` com `-tags integration`).
 - **Passos:** [ ] Subir MiniStack no teste (como nos ITs do `shared/go`), processar `TicketsIssued` ×5 e ler `receipts/{orderId}.json`; conferir conteúdo e **um** registro. [ ] `OrderCancelled` ×5 → 1 registro.
 - **Pronto quando:** `make test-integration` verde. **Valida:** `make test-integration`. **Mapeia:** R1, S3.
 

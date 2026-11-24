@@ -19,6 +19,13 @@ public sealed class AppConfigTests
         Assert.Equal(TimeSpan.FromMilliseconds(30000), config.PaymentWorkerLease);
         Assert.Equal(10, config.SqsWaitTimeSeconds);
         Assert.Contains("Username=payments_worker", config.DatabaseWorkerUrl, StringComparison.Ordinal);
+        Assert.Equal(new Uri("http://otel-collector:4317"), config.OtlpEndpoint);
+    }
+
+    [Fact]
+    public void Tracing_is_off_without_an_otlp_endpoint()
+    {
+        Assert.Null(TestEnv.Config(new() { ["OTEL_EXPORTER_OTLP_ENDPOINT"] = null }).OtlpEndpoint);
     }
 
     [Fact]
@@ -59,6 +66,7 @@ public sealed class AppConfigTests
     [InlineData("DATABASE_URL", "mysql://u:p@h/db")]
     [InlineData("DATABASE_WORKER_URL", "postgres://host-only")]
     [InlineData("PAYMENTS_TOPIC_ARN", "ticketpro-payments")]
+    [InlineData("OTEL_EXPORTER_OTLP_ENDPOINT", "otel-collector:4317")] // no scheme (divergence D3)
     public void Invalid_value_is_rejected_with_the_variable_name(string variable, string value)
     {
         var e = Assert.Throws<ConfigException>(() => TestEnv.Config(new() { [variable] = value }));

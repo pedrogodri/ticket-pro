@@ -11,7 +11,10 @@ TIMEOUT_MS="${ORDER_PAYMENT_TIMEOUT_MS:-15000}"
 LATENCY_MS=$((TIMEOUT_MS + 5000))
 
 trap 'set_payment >/dev/null 2>&1' EXIT
-set_payment PAYMENT_LATENCY_MS=$LATENCY_MS PAYMENT_PROVIDER_TIMEOUT_MS=$((LATENCY_MS + 10000)) PAYMENT_FAILURE_RATE=0 \
+# The payment refuses to boot unless PAYMENT_WORKER_LEASE_MS > PAYMENT_PROVIDER_TIMEOUT_MS (RFC 0003 §5.1,
+# RFC 0009 §5.5): raise the lease with the timeout (payment plan P03).
+set_payment PAYMENT_LATENCY_MS=$LATENCY_MS PAYMENT_PROVIDER_TIMEOUT_MS=$((LATENCY_MS + 10000)) \
+  PAYMENT_WORKER_LEASE_MS=$((LATENCY_MS + 20000)) PAYMENT_FAILURE_RATE=0 \
   || die "payment did not come back"
 info "payment latency ${LATENCY_MS}ms > order deadline ${TIMEOUT_MS}ms"
 

@@ -396,6 +396,86 @@ public sealed class PlatformIntegrationTests
         Assert.Equal(2, outcomes.Count(o => o == ConsumeOutcome.Succeeded));
     }
 
+    /// <summary>T14 / ADR-0012: the consumer span continues the producer's trace and links to it.</summary>
+    [Fact]
+    public async Task Consumer_span_continues_the_producer_trace()
+    {
+        var stopped = new ConcurrentBag<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == Spans.SourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = stopped.Add,
+        };
+        ActivitySource.AddActivityListener(listener);
+        const string traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        await using var f = await Fixture.CreateAsync(new EffectHandler());
+        var messageId = Guid.CreateVersion7().ToString();
+        await f.Sqs.SendMessageAsync(new SendMessageRequest
+        {
+            QueueUrl = f.QueueUrl,
+            MessageBody = Example("OrderCreated.v1", messageId),
+            MessageAttributes = new Dictionary<string, MessageAttributeValue>
+            {
+                ["traceparent"] = new() { DataType = "String", StringValue = traceparent },
+            },
+        });
+        var outcomes = new List<ConsumeOutcome>();
+        for (var i = 0; i < 10 && outcomes.Count == 0; i++)
+        {
+            outcomes.AddRange(await f.ReceiveAndProcessAsync());
+        }
+        Assert.Equal([ConsumeOutcome.Succeeded], outcomes);
+
+        var consumer = Assert.Single(stopped, a => a.Kind == ActivityKind.Consumer && (string?)a.GetTagItem("messaging.message.id") == messageId);
+        Assert.Equal("process OrderCreated", consumer.DisplayName);
+        Assert.Equal("4bf92f3577b34da6a3ce929d0e0e4736", consumer.TraceId.ToHexString());
+        Assert.Equal("00f067aa0ba902b7", consumer.ParentSpanId.ToHexString());
+        Assert.Single(consumer.Links);
+    }
+
+    private sealed class RecordingPublisher : IOutboxPublisher
+    {
+        public ConcurrentBag<string?> Traceparents { get; } = [];
+
+        public Task PublishAsync(string topicArn, Envelope envelope, string? traceparent, CancellationToken ct)
+        {
+            Traceparents.Add(traceparent);
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>T14 / ADR-0012: the relay publishes inside a producer span that continues the trace stored
+    /// with the row, and that span becomes the message traceparent.</summary>
+    [Fact]
+    public async Task Relay_publishes_inside_a_producer_span()
+    {
+        var stopped = new ConcurrentBag<Activity>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name is Spans.SourceName or "relay-test-request",
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = stopped.Add,
+        };
+        ActivitySource.AddActivityListener(listener);
+        using var requestSource = new ActivitySource("relay-test-request");
+        var ds = await Containers.PostgresAsync();
+        var env = NewEnvelope();
+        ActivityContext request;
+        using (var activity = requestSource.StartActivity("request", ActivityKind.Server)!)
+        {
+            request = activity.Context;
+            await EnqueueAsync(ds, TopicArn, env);
+        }
+        var publisher = new RecordingPublisher();
+        await NewRelay(ds, publisher).RunOnceAsync(CancellationToken.None);
+
+        var producer = Assert.Single(stopped, a => a.Kind == ActivityKind.Producer && (string?)a.GetTagItem("messaging.message.id") == env.MessageId);
+        Assert.Equal(request.TraceId, producer.TraceId);
+        Assert.Equal(request.SpanId, producer.ParentSpanId);
+        Assert.Equal($"00-{producer.TraceId.ToHexString()}-{producer.SpanId.ToHexString()}-01", Assert.Single(publisher.Traceparents));
+    }
+
     [Fact]
     public async Task RunLongPollLongerThanClientTimeout()
     {

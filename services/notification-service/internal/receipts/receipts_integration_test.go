@@ -19,9 +19,9 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/ticketpro/notification-service/internal/modules/receipts"
 	"github.com/ticketpro/notification-service/internal/platform/envelope"
 	"github.com/ticketpro/notification-service/internal/platform/messaging"
+	"github.com/ticketpro/notification-service/internal/receipts"
 	"github.com/ticketpro/notification-service/internal/testdb"
 )
 

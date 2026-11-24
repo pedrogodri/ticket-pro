@@ -1,6 +1,6 @@
 # RFC 0005 — Design do order-service em Java
 
-- **Status:** 📝 Draft (design fechado — implementação nas tarefas T09–T11 do [plano](../superpowers/plans/2026-11-19-java-order-inventory.md))
+- **Status:** 🚧 In progress (24/11/2026: P1–P3 — T09–T11 do [plano](../superpowers/plans/2026-11-19-java-order-inventory.md) — implementadas em `services/order-service`, branch `feat/order-service`, PR #23 ainda não mergeado; só falta o ensaio ponta a ponta com o inventory, T12)
 - **Scope:** O módulo `orders` do `order-service` (Java 21, Spring Boot): API assíncrona (`POST /orders` → 202 com `Idempotency-Key`, `GET /orders/{id}`, `GET /orders`), a máquina de estados da saga `PENDING → AWAITING_PAYMENT → CONFIRMED | CANCELLED` com `UPDATE` condicional, o deadline scanner e o estorno de aprovação tardia. Usa a camada [RFC 0004](0004-camada-platform-em-java-para-order-e-inventory.md) e não a redefine. **Sem mudança de contrato e sem migration nova**; os pontos que talvez exijam uma (Decisão 5) ficam como `OPEN`.
 - **Related:** [ADR-0003](../adr/0003-orchestrated-saga-in-order-service.md), [ADR-0006](../adr/0006-idempotent-consumers-processed-messages.md), [ADR-0021](../adr/0021-order-and-inventory-in-java.md), [RFC 0001 §5.5](0001-message-contract-and-event-versioning.md), [RFC 0002 §5.6](0002-authentication-and-authorization.md), [RFC 0003 §5.1, §5.7](0003-failure-handling-strategy.md), [arquitetura §6](../arquitetura.md), [`services/order-service/migrations/`](../../services/order-service/migrations/V0004__create_orders.sql), [`contracts/events/`](../../contracts/asyncapi.yaml). Comportamento de referência (TypeScript removido): `git show 65d538c:services/order-service/src/modules/orders/...`.
 
@@ -173,7 +173,7 @@ README do serviço (API, eventos, variáveis); `docs/demo/versioning.md` aponta 
 ## 10. Unresolved questions
 
 - Mapeamento de `InventoryRejected(SECTOR_NOT_FOUND | INVALID_QUANTITY)` para o `OrderCancelled` (Decisão 4): precisa de ok do grupo, porque estender o enum é mudança de contrato (RFC 0001 §5.4).
-- Guardar `correlation_id` no pedido (Decisão 5) exigiria `V0007`.
+- Guardar `correlation_id` no pedido (Decisão 5, hoje UUID novo no scanner) exigiria `V0007`.
 
 ## 11. Decisions
 
@@ -183,7 +183,7 @@ README do serviço (API, eventos, variáveis); `docs/demo/versioning.md` aponta 
 | 2 | `LOCKED` | `POST /orders` grava `orders` + outbox numa só TX no pool **app** (RLS) e responde `202` antes de qualquer efeito; `Idempotency-Key` obrigatório (UUID) e único por usuário. |
 | 3 | `LOCKED` | `payment_deadline_at` usa o `now()` do banco e entra no mesmo `UPDATE` que leva a `AWAITING_PAYMENT`; a confirmação exige `payment_deadline_at >= now()`. |
 | 4 | `ASSUMED` | `InventoryRejected` de qualquer `reason` cancela como `OUT_OF_STOCK` (comportamento do código antigo). Divergência com o contrato registrada em §3 e no plano. |
-| 5 | `OPEN` | `correlationId` dos eventos gerados por scanner e consumidores que não o carregam: UUID novo (como no código antigo) ou coluna `orders.correlation_id` (`V0007`). Decidir em T11 conforme o custo do trace no Jaeger. |
+| 5 | `ASSUMED` | `correlationId`: os handlers propagam o do evento consumido; o deadline scanner gera um UUID novo por cancelamento (como no código antigo), sem `V0007`. Decidido em T11: o custo é só o trace do timeout solto no Jaeger; a coluna `orders.correlation_id` entra se a demo precisar. |
 | 6 | `ASSUMED` | `GET /orders` pagina por cursor opaco (base64 de `createdAt|id`), `limit` padrão 20, máximo 50. |
 | 7 | `ASSUMED` | Repetição de `Idempotency-Key` responde `200` com o pedido completo (padrões §4), mesmo se o primeiro `POST` ainda não terminou a saga. |
 | 8 | `ASSUMED` | `ORDER_MAX_QUANTITY` ≤ 6 (o `CHECK` do banco é a última defesa) e falha no boot se maior. |

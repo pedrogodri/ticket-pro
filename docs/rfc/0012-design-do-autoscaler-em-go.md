@@ -98,9 +98,10 @@ Segundo alvo por padrão, métricas Prometheus, autenticação do socket.
 
 | # | Grade | Decision |
 |---|---|---|
-| 1 | `OPEN` | Sinal de carga do payment (§5.2). Se for a opção 2 ou 3, abrir ADR que substitua o 0015. |
+| 1 | `OPEN` | **Substituída pela #4.** Sinal de carga do payment (§5.2). Se for a opção 2 ou 3, abrir ADR que substitua o 0015. |
 | 2 | `LOCKED` | Escala pela Docker API com réplicas clonadas e labels do compose (ADR-0015). |
 | 3 | `ASSUMED` | Alvo padrão continua só o payment; o inventory é opcional por env. |
+| 4 | `ASSUMED` | Resolve a #1 (24/11, Pedro): **opção 1 da §5.2**. O sinal continua sendo a profundidade da fila e a demo é apresentada como prova do **mecanismo** (fila → decisão → Docker API → vazão), dizendo que o backlog real do payment fica na tabela `payments`. Sem código e sem ADR novo: cabe no ADR-0015. A opção 3 (o payment expõe a contagem de `PENDING` por HTTP) fica como evolução, com ADR que substitua o 0015. Ensaio da demo (S03): duas execuções seguidas, ~40 s cada, sem réplicas órfãs. |
 
 ## 12. Phasing
 
