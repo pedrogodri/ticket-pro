@@ -180,9 +180,10 @@ O payment sobe com latência de 20 s, maior que o deadline de 15 s do pedido ([c
 | Bônus | Como mostrar | Esperado |
 |---|---|---|
 | **Gateway** (RFC 0002) | `scripts/gateway-check.sh` | token revogado por `TokenRevoked` recebe `401`; logins repetidos recebem `429` + `Retry-After` |
+| **Notification sozinho** (S3, 2+ consumidores, R1; RFC 0011) | `scripts/notification-check.sh` (~15 s) | `TicketsIssued` ×5 grava um comprovante `receipts/{orderId}.json` no S3 e uma linha em `notifications`, com 4 entregas logadas como `"duplicate":true`; `OrderCancelled` ×5 grava uma linha e nenhum comprovante |
 | **Payment sozinho** (R5, R1; RFC 0009) | `scripts/payment-check.sh` (~2 min: recria as réplicas três vezes) | `APPROVED` com um só pagamento e uma só cobrança para 4 entregas; um estorno do valor capturado para 2 `RefundRequested`; `FAILED(DECLINED)` com taxa 1; `FAILED(PROVIDER_TIMEOUT)` sem cobrança com timeout menor que a latência |
 | **Versionamento** | `scripts/demo-versioning.sh` (detalhes em [demo/versioning.md](demo/versioning.md)) | v1 é convertido para `channel = API`, v2 mantém `WEB` e v3 vai para a DLQ |
-| **Autoescala** | `scripts/demo-autoscale.sh` | com 40 mensagens acumuladas, o payment sobe acima de 2 réplicas (até 5) e volta a 2 depois do cooldown; o log `scale_decision` mostra a profundidade e as réplicas |
+| **Autoescala** | `scripts/demo-autoscale.sh` | com 40 mensagens acumuladas, o payment sobe acima de 2 réplicas (até 5) e volta a 2 depois do cooldown; o log `scale_decision` mostra a profundidade e as réplicas. Ensaio de 24/11: duas execuções seguidas, ~40 s cada, pico de 5 réplicas, +~190 MiB na stack no pico e nenhuma réplica órfã no fim |
 | **OpenTelemetry** | Jaeger → serviço `gateway` → um `GET /events/{id}` | um trace com gateway, inventory e as queries (`SELECT`) |
 | **CQRS** | `GET /me/tickets` (o caminho feliz já mostra) | read model do user montado só a partir de eventos |
 | **IaC** | `docker compose logs infra-init \| tail -20` | o `terraform apply` criou tópicos, filas, DLQs, assinaturas, bucket e segredo |

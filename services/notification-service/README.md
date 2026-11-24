@@ -61,6 +61,7 @@ Escolha do dono ([ADR-0023](../../docs/adr/0023-internal-architecture-chosen-per
    - [RFC 0003](../../docs/rfc/0003-failure-handling-strategy.md) §5.4.
 3. Design e plano: [RFC 0011](../../docs/rfc/0011-design-do-notification-service-em-go.md) e [plano](../../docs/superpowers/plans/2026-11-19-notification-service.md).
 4. Testes: `make test` (unidade) e `make test-integration` (pacote `receipts` contra o MiniStack e o Postgres).
+5. Ao vivo, com a stack no ar: `scripts/notification-check.sh` (na raiz) publica `TicketsIssued` e `OrderCancelled` ×5 e confere um comprovante no S3 e uma linha em `notifications`.
 
 ## Variáveis de ambiente
 
