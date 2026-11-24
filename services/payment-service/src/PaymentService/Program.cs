@@ -93,6 +93,9 @@ services.AddSingleton(sp => new OutboxRelay(
     },
     sp.GetRequiredService<ILogger<OutboxRelay>>()));
 
+// Tracing (ADR-0012): only with OTEL_EXPORTER_OTLP_ENDPOINT; polling stays out of Jaeger.
+services.AddTracing(config);
+
 services.AddHostedService<ConsumerLoop>();
 services.AddHostedService<OutboxRelayLoop>();
 services.AddHostedService<PaymentWorker>();

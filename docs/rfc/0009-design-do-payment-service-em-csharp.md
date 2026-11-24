@@ -141,6 +141,7 @@ Retry de cobrança, provedor real, estorno parcial, limpeza de `provider_charges
 | 5 | `ASSUMED` | O estorno simulado nunca falha (RFC 0003 §5.6). |
 | 6 | `ASSUMED` | Resolve a #3: `V0006` adiciona `payments.correlation_id` (nullable); o consumidor grava o do `PaymentRequested` e o worker o usa no `PaymentApproved`/`PaymentFailed`, com UUID novo só para linhas anteriores à migration. Ver commit `2b671a0` (PR #22). |
 | 7 | `ASSUMED` | Responde à segunda questão da §10: o `f7-late-response.sh` passa `PAYMENT_WORKER_LEASE_MS = latência + 20000` (timeout = latência + 10000), senão a validação da #2 impede o payment de subir no cenário. O mesmo vale para o passo 1 do F7 na collection do Postman. |
+| 8 | `ASSUMED` | Tracing (ADR-0012, bônus OTel): o `shared/dotnet` 0.2.0 cria os spans de consumer, producer e `Child` via `ActivitySource`, sem dependência nova; o SDK e o exportador OTLP ficam no serviço (`App/Tracing.cs`), ligados só com `OTEL_EXPORTER_OTLP_ENDPOINT`. O worker continua o trace do `PaymentRequested` por `payments.traceparent` (`V0007`), e o `QuietPollingSampler` descarta spans `Client` sem pai (polling). |
 
 ## 12. Phasing
 

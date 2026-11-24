@@ -24,8 +24,8 @@ public sealed partial class PaymentRequestedHandler(ILogger<PaymentRequestedHand
         // order_id UNIQUE: a second PaymentRequested for the same order (new messageId, e.g. the order
         // service retried) must not create a second charge. processed_messages only catches same messageId.
         await using var cmd = new NpgsqlCommand("""
-            INSERT INTO payments (id, order_id, amount_cents, currency, status, correlation_id)
-            VALUES ($1, $2, $3, $4, 'PENDING', $5)
+            INSERT INTO payments (id, order_id, amount_cents, currency, status, correlation_id, traceparent)
+            VALUES ($1, $2, $3, $4, 'PENDING', $5, $6)
             ON CONFLICT (order_id) DO NOTHING
             """, connection, transaction);
         cmd.Parameters.Add(new NpgsqlParameter { Value = Guid.CreateVersion7() });
@@ -33,6 +33,8 @@ public sealed partial class PaymentRequestedHandler(ILogger<PaymentRequestedHand
         cmd.Parameters.Add(new NpgsqlParameter { Value = request.AmountCents });
         cmd.Parameters.Add(new NpgsqlParameter { Value = request.Currency });
         cmd.Parameters.Add(new NpgsqlParameter { Value = Guid.Parse(envelope.CorrelationId) });
+        // The consumer span (ADR-0012): the worker continues this trace when it charges.
+        cmd.Parameters.Add(new NpgsqlParameter { Value = (object?)TraceContext.Inject() ?? DBNull.Value, NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Text });
 
         if (await cmd.ExecuteNonQueryAsync(ct) == 1)
         {
