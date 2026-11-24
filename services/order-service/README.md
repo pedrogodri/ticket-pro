@@ -1,71 +1,90 @@
 # order-service
 
-API assíncrona de pedidos e orquestrador da saga de compra do Ticket Pro, em Java 21 (Spring Boot).
+API assíncrona de pedidos e orquestrador da saga de compra do Ticket Pro, em Java 21 (Spring Boot 4).
 
 **Dono:** Matheus.
 
-**Estado:** a implementação TypeScript foi removida ([ADR-0021](../../docs/adr/0021-order-and-inventory-in-java.md)) e será refeita em Java. Esta pasta guarda o que ela deve cumprir: migrations, `compose.yaml`, `contracts/` e este README. O código antigo está no histórico do git, no commit `65d538c` (`git show 65d538c:services/order-service/src/...`), como referência de comportamento. O comportamento esperado era: API de pedidos (`POST /orders` 202 + `Idempotency-Key`, `GET /orders/{id}`, `GET /orders`) e saga (reserva → pagamento → confirmação; estoque rejeitado ou pagamento recusado cancelam). Deadline scanner e estorno tardio chegam na F3.
+**Estado:** implementado conforme a [RFC 0005](../../docs/rfc/0005-design-do-order-service-em-java.md) (T09–T11 do [plano](../../docs/superpowers/plans/2026-11-19-java-order-inventory.md)): API, saga, deadline scanner e estorno de aprovação tardia, sobre a camada `platform/` da [RFC 0004](../../docs/rfc/0004-camada-platform-em-java-para-order-e-inventory.md). O ponta a ponta (`scripts/happy-path.sh`, F1–F8) depende do inventory-service, que ainda não tem código.
 
 ## Responsabilidades
 
 - **R3:** `POST /orders` responde `202` + `Location`, com `Idempotency-Key` obrigatório. O cliente consulta `GET /orders/{id}`.
-- Máquina de estados da saga e compensações ([arquitetura §6](../../docs/arquitetura.md), [RFC 0003 §5.7](../../docs/rfc/0003-failure-handling-strategy.md)).
+- Máquina de estados da saga e compensações ([arquitetura §6](../../docs/arquitetura.md), [RFC 0003 §5.7](../../docs/rfc/0003-failure-handling-strategy.md)): toda transição é um `UPDATE … WHERE id = ? AND status = <esperado>`; evento duplicado, atrasado ou fora de ordem não muda nada (`stale_event`).
 - Deadline scanner de pagamento e estorno de aprovação tardia (F7).
-- `OrderCreated` v2 controlado por `ORDER_CREATED_VERSION` (bônus de versionamento).
-- **BOLA:** pedido de outro usuário → `404`, com RLS por `app.user_id`.
+- `OrderCreated` v1/v2 controlado por `ORDER_CREATED_VERSION` (bônus de versionamento).
+- **BOLA:** pedido de outro usuário → `404`; o SQL filtra por `user_id` e a RLS (`app.user_id`) é a segunda barreira.
 
 ## API (via gateway)
 
-| Endpoint            | Fase                        | Resposta                          |
-| ------------------- | --------------------------- | --------------------------------- |
-| `GET /health/live`  | F0 ✅                       | `200 {"status":"up"}`             |
-| `GET /health/ready` | F0 ✅ (`db`/`broker` na F1) | `200 {"status":"up","checks":{}}` |
-| `POST /orders`      | F2                          | `202` + `Location`                |
-| `GET /orders/{id}`  | F2                          | pedido com status                 |
-| `GET /orders`       | F2                          | pedidos do usuário, paginados     |
+Identidade só pelo `X-User-Id` injetado pelo gateway; erros em `application/problem+json` com título PT-BR.
+
+| Endpoint | Sucesso | Erros |
+| --- | --- | --- |
+| `GET /health/live` | `200 {"status":"up"}` | — |
+| `GET /health/ready` | `200 {"status":"up","checks":{"db":"up","broker":"up"}}` (broker fora = `degraded`, ainda 200) | `503` com o banco fora |
+| `POST /orders` `{eventId, sectorId, quantity}` + `Idempotency-Key` (UUID) | `202` + `Location: /orders/{id}` + `{orderId, status:"PENDING"}`; chave repetida → `200` + pedido | `400` (campo desconhecido, UUID inválido, `quantity` fora de 1..`ORDER_MAX_QUANTITY`, header ausente), `401` sem `X-User-Id` |
+| `GET /orders/{id}` | `200 {orderId, status, eventId, sectorId, quantity, totalCents, currency, cancelReason, createdAt}` | `404` (inexistente, de outro usuário ou id inválido) |
+| `GET /orders?limit=&cursor=` | `200 {items, nextCursor}` (`limit` 1..50, padrão 20, mais novos primeiro) | `400` cursor/limit inválido |
 
 ## Eventos
 
-| Publica (tópico `ticketpro-orders`)                                                               | Consome (fila `ticketpro-order-service`)                                                                                       |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `OrderCreated` (v1/v2), `PaymentRequested`, `OrderConfirmed`, `OrderCancelled`, `RefundRequested` | `InventoryReserved`, `InventoryRejected`, `InventoryReservationExpired`, `PaymentApproved`, `PaymentFailed`, `PaymentRefunded` |
+| Consome (fila `ticketpro-order-service`) | Efeito | Publica (tópico `ticketpro-orders`, via outbox) |
+| --- | --- | --- |
+| — (`POST /orders`) | `PENDING` | `OrderCreated` v2 (v1 com `ORDER_CREATED_VERSION=1`) |
+| `InventoryReserved` | `PENDING → AWAITING_PAYMENT`, preço do evento, prazo `now() + ORDER_PAYMENT_TIMEOUT_MS` | `PaymentRequested` |
+| `InventoryRejected` | `PENDING → CANCELLED(OUT_OF_STOCK)` (qualquer `reason`, Decisão 4) | `OrderCancelled` |
+| `InventoryReservationExpired` | `PENDING/AWAITING_PAYMENT → CANCELLED(RESERVATION_EXPIRED)` | `OrderCancelled` |
+| `PaymentApproved` no prazo | `AWAITING_PAYMENT → CONFIRMED` | `OrderConfirmed` |
+| `PaymentApproved` tardio | cancela (`PAYMENT_TIMEOUT`) se ainda não cancelado; `refund_status = REQUESTED` uma vez só | `OrderCancelled` (se cancelou agora) + `RefundRequested` |
+| `PaymentFailed` | `AWAITING_PAYMENT → CANCELLED(PAYMENT_FAILED)` | `OrderCancelled` |
+| `PaymentRefunded` | `refund_status = REFUNDED` | — |
+| — (deadline scanner) | `AWAITING_PAYMENT` vencido → `CANCELLED(PAYMENT_TIMEOUT)` | `OrderCancelled` |
+
+## Código
+
+```
+br.furb.ticketpro.order
+├── platform/        # RFC 0004: cópia do auth-service (ADR-0022) + SqsConsumerRunner, jobs/, db/UserScopedTransaction
+└── modules/orders/
+    ├── web/            OrderController, CreateOrderRequest, OrderResponse, CursorCodec
+    ├── application/    CreateOrder, OrderQueries, SagaHandlers, DeadlineScanner, OrderEvents
+    ├── domain/         OrderStatus, CancelReason, OrderView, Transitions (SQL das transições)
+    └── infrastructure/ OrderRepository (JDBC)
+```
+
+A API usa só o pool `app` (`orders_app`, RLS); consumidor, relay e scanner usam só o pool `worker` (`orders_worker`, `BYPASSRLS`). O `platform/` em Java é código do serviço (não é cópia gerada): correção nele deve entrar também nos outros serviços Java (ADR-0022).
 
 ## Dados
 
-O banco é `orders`, no container `orders-db`. Tabelas: `orders`, `outbox` e `processed_messages`.
-
-Constraints-chave:
-
-- `(user_id, idempotency_key) UNIQUE`;
-- `CHECK status IN (...)`;
-- `CHECK quantity BETWEEN 1 AND 6`.
-
-## Por onde começar
-
-1. Ler a seção _Primeiros passos_ do [README da raiz](../../README.md).
-2. Ler:
-   - [arquitetura](../../docs/arquitetura.md) §6 (saga);
-   - [RFC 0003](../../docs/rfc/0003-failure-handling-strategy.md) inteira;
-   - [RFC 0001 §5.5](../../docs/rfc/0001-message-contract-and-event-versioning.md);
-   - [padrões](../../docs/padroes.md) §2.2 (estrutura Java), §4 e §6.
-3. **Plataforma:** o pacote `platform/` em Java (envelope, outbox, idempotência, mensageria, logging), seguindo o _Platform contract_ do [plano F1](../../docs/superpowers/plans/2026-11-12-f1-platform.md) e os testes P01–P15; banco, migrations, relay e readiness. O `auth-service` é o exemplo Java.
-4. **Saga:** `POST /orders`, `GET /orders/{id}`, a saga e o `scripts/happy-path.sh` ([roadmap](../../docs/roadmap.md)).
+O banco é `orders`, no container `orders-db`. Tabelas: `orders`, `outbox` e `processed_messages`. Constraints-chave: `(user_id, idempotency_key) UNIQUE`, `CHECK status IN (...)`, `CHECK quantity BETWEEN 1 AND 6`, RLS `FORCE` com a política `orders_owner`.
 
 ## Variáveis de ambiente
 
-| Variável                                                                                                                   | Obrigatória | Exemplo                                                    |
-| -------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------------------- |
-| `SERVICE_NAME`                                                                                                             | sim         | `order-service`                                            |
-| `PORT`                                                                                                                     | sim         | `8080`                                                     |
-| `LOG_LEVEL`                                                                                                                | sim         | `debug` \| `info` \| `warn` \| `error`                     |
-| `DATABASE_URL`                                                                                                             | sim         | `postgres://orders_app:…@orders-db:5432/orders` (API, RLS) |
-| `DATABASE_WORKER_URL`                                                                                                      | sim         | role `orders_worker` (relay, consumidores, jobs)           |
-| `ORDERS_TOPIC_ARN`                                                                                                         | sim         | `arn:aws:sns:us-east-1:000000000000:ticketpro-orders`      |
-| `AWS_REGION`                                                                                                               | sim         | `us-east-1` (`AWS_ENDPOINT_URL` aponta para o MiniStack)   |
-| `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_MAX_BACKOFF_MS`, `OUTBOX_CLAIM_LEASE_MS`, `HTTP_CLIENT_TIMEOUT_MS` | não         | 200, 50, 30000, 30000, 3000 (RFC 0003 §5.1)                |
+| Variável | Obrigatória | Padrão / exemplo |
+| --- | --- | --- |
+| `SERVICE_NAME`, `PORT`, `LOG_LEVEL` | sim | `order-service`, `8080`, `info` |
+| `DATABASE_URL` | sim | `postgres://orders_app:…@orders-db:5432/orders` (API, RLS) |
+| `DATABASE_WORKER_URL` | sim | role `orders_worker` (relay, consumidor, scanner) |
+| `ORDERS_TOPIC_ARN`, `QUEUE_URL` | sim | `ticketpro-orders`, `ticketpro-order-service` |
+| `CONTRACTS_DIR` | sim | `/app/contracts` |
+| `AWS_REGION`, `AWS_ENDPOINT_URL` | sim / não | `us-east-1`, `http://ministack:4566` |
+| `OUTBOX_POLL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_MAX_BACKOFF_MS`, `OUTBOX_CLAIM_LEASE_MS`, `HTTP_CLIENT_TIMEOUT_MS` | não | 200, 50, 30000, 30000, 3000 |
+| `CONSUMER_CONCURRENCY`, `SQS_WAIT_TIME_S`, `SHUTDOWN_TIMEOUT_S` | não | 4 (pool worker = +4), 10, 30 |
+| `ORDER_PAYMENT_TIMEOUT_MS` | não | 15000 |
+| `ORDER_DEADLINE_SCAN_INTERVAL_MS`, `ORDER_DEADLINE_SCAN_BATCH_SIZE` | não | 1000, 50 |
+| `ORDER_MAX_QUANTITY` | não | 6 (o boot falha se > 6) |
+| `ORDER_CREATED_VERSION` | não | 2 (1 ou 2) |
+| `RESERVATION_TTL_MS`, `RESERVATION_SAFETY_MARGIN_MS` | não | 60000, 30000 — o boot falha se `RESERVATION_TTL_MS < ORDER_PAYMENT_TIMEOUT_MS + RESERVATION_SAFETY_MARGIN_MS` |
 
 O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, só desenvolvimento). `contracts/` é cópia gerada por `scripts/sync-shared.sh`: não edite.
 
 ## Comandos
 
-A fazer: `Makefile`, `Dockerfile` e `.devcontainer/` em Java, com os alvos de [padrões §1.2](../../docs/padroes.md) (`test`, `test-integration`, `lint`, `typecheck`, `run`), iguais aos do `auth-service`. Até lá, o `compose.yaml` desta pasta não builda.
+| Tarefa | Comando |
+| --- | --- |
+| Lint / typecheck / unitários | `make lint typecheck test` |
+| Integração (Testcontainers: Postgres com as migrations reais + MiniStack) | `make test-integration` |
+| Um teste | `./mvnw test -Dtest=OrderControllerTest#createReturns202WithLocation` |
+| Subir só este serviço | `make run` (ou, na raiz, `docker compose up -d --build order-service`) |
+
+Testes: matriz da plataforma P01–P20 (`PlatformCoreTest`, `PlatformIT`, `PeriodicJobRunnerTest`, logger com `"duplicate":true`) e `OrdersIT` (idempotência concorrente, RLS/BOLA, cada guarda da saga, scanner concorrente, corrida scanner × aprovação tardia, estorno único, consumo via SQS).
