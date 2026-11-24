@@ -19,12 +19,16 @@ import br.furb.ticketpro.order.platform.outbox.OutboxRelayProperties;
 import br.furb.ticketpro.order.platform.outbox.OutboxWriter;
 import br.furb.ticketpro.order.platform.outbox.RetentionJob;
 import br.furb.ticketpro.order.platform.support.Containers;
+import br.furb.ticketpro.order.platform.support.RecordedSpans;
+import br.furb.ticketpro.order.platform.tracing.TraceContext;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.api.trace.SpanKind;
 import io.opentelemetry.api.trace.TraceFlags;
 import io.opentelemetry.api.trace.TraceState;
 import io.opentelemetry.context.Context;
 import io.opentelemetry.context.Scope;
+import io.opentelemetry.sdk.trace.data.SpanData;
 import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -46,11 +50,14 @@ import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.services.sqs.model.MessageAttributeValue;
 import software.amazon.awssdk.services.sqs.model.MessageSystemAttributeName;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-/** Platform test matrix P07–P16 and P21 against Testcontainers Postgres + MiniStack. */
+/**
+ * Platform test matrix P07–P16, P21 and the T14 spans against Testcontainers Postgres + MiniStack.
+ */
 class PlatformIT {
 
   private static final String TOPIC_ARN = "arn:aws:sns:us-east-1:000000000000:ticketpro-test";
@@ -491,6 +498,70 @@ class PlatformIT {
                 ds, "SELECT count(*) FROM outbox WHERE published_at > now() - interval '2 hours'"))
         .isEqualTo(1);
     assertThat(Containers.count(ds, "SELECT count(*) FROM processed_messages")).isEqualTo(1);
+  }
+
+  /** T14 (ADR-0012): the consumer span continues the producer's trace and links to it. */
+  @Test
+  void consumerSpanContinuesTheProducerTrace() throws Exception {
+    try (RecordedSpans spans = new RecordedSpans();
+        Fixture f = Fixture.create(new EffectHandler(false, null))) {
+      Span producer =
+          spans.tracer().spanBuilder("publish").setSpanKind(SpanKind.PRODUCER).startSpan();
+      String traceparent;
+      try (Scope ignored = producer.makeCurrent()) {
+        traceparent = TraceContext.inject().orElseThrow();
+      }
+      producer.end();
+      String body = example("PaymentFailed.v1", MSG_ID);
+      f.sqs()
+          .sendMessage(b ->
+              b.queueUrl(f.queue())
+                  .messageBody(body)
+                  .messageAttributes(
+                      Map.of(
+                          "traceparent",
+                          MessageAttributeValue.builder()
+                              .dataType("String")
+                              .stringValue(traceparent)
+                              .build())));
+      List<ConsumeOutcome> outcomes = new ArrayList<>();
+      for (int i = 0; i < 10 && outcomes.isEmpty(); i++) {
+        outcomes.addAll(f.receiveAndProcess());
+      }
+      assertThat(outcomes).containsExactly(ConsumeOutcome.SUCCEEDED);
+
+      SpanData consumer = spans.only(SpanKind.CONSUMER);
+      assertThat(consumer.getName()).isEqualTo("process PaymentFailed");
+      assertThat(consumer.getTraceId()).isEqualTo(producer.getSpanContext().getTraceId());
+      assertThat(consumer.getParentSpanId()).isEqualTo(producer.getSpanContext().getSpanId());
+      assertThat(consumer.getLinks()).hasSize(1);
+    }
+  }
+
+  /**
+   * T14 (ADR-0012): the relay publishes inside a producer span that continues the trace stored with
+   * the row, and that span (not the stored one) becomes the message traceparent.
+   */
+  @Test
+  void relayPublishesInsideAProducerSpan() throws Exception {
+    DataSource ds = Containers.postgres();
+    try (RecordedSpans spans = new RecordedSpans()) {
+      Span request =
+          spans.tracer().spanBuilder("POST /orders").setSpanKind(SpanKind.SERVER).startSpan();
+      try (Scope ignored = request.makeCurrent()) {
+        enqueue(ds, TOPIC_ARN, newEnvelope(), true);
+      }
+      request.end();
+      List<Optional<String>> sent = new ArrayList<>();
+      relay(ds, (topic, env, traceparent) -> sent.add(traceparent), 10).runOnce();
+
+      SpanData producer = spans.only(SpanKind.PRODUCER);
+      assertThat(producer.getTraceId()).isEqualTo(request.getSpanContext().getTraceId());
+      assertThat(producer.getParentSpanId()).isEqualTo(request.getSpanContext().getSpanId());
+      assertThat(sent)
+          .containsExactly(
+              Optional.of("00-" + producer.getTraceId() + "-" + producer.getSpanId() + "-01"));
+    }
   }
 
   /**

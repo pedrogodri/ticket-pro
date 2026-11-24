@@ -1,5 +1,7 @@
 package br.furb.ticketpro.order.platform.messaging;
 
+import br.furb.ticketpro.order.platform.tracing.Spans;
+import io.opentelemetry.context.Scope;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.context.SmartLifecycle;
@@ -24,7 +26,15 @@ public final class SqsConsumerRunner implements SmartLifecycle {
   @Override
   public void start() {
     stop.set(false);
-    thread = Thread.ofVirtual().name("sqs-consumer").start(() -> consumer.run(stop::get));
+    // Long polls are not traced (Spans.unsampled); each message opens its own consumer span.
+    thread =
+        Thread.ofVirtual()
+            .name("sqs-consumer")
+            .start(() -> {
+              try (Scope ignored = Spans.unsampled()) {
+                consumer.run(stop::get);
+              }
+            });
   }
 
   @Override

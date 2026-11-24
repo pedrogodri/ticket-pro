@@ -1,6 +1,8 @@
 package br.furb.ticketpro.order.platform.jobs;
 
 import br.furb.ticketpro.order.platform.retry.Backoff;
+import br.furb.ticketpro.order.platform.tracing.Spans;
+import io.opentelemetry.context.Scope;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +34,15 @@ public final class PeriodicJobRunner implements SmartLifecycle {
   public synchronized void start() {
     stopping = false;
     for (PeriodicJob job : jobs) {
-      threads.add(Thread.ofVirtual().name("job-" + job.name()).start(() -> loop(job)));
+      // Jobs are not traced (Spans.unsampled): their periodic queries would flood Jaeger.
+      threads.add(
+          Thread.ofVirtual()
+              .name("job-" + job.name())
+              .start(() -> {
+                try (Scope ignored = Spans.unsampled()) {
+                  loop(job);
+                }
+              }));
     }
   }
 

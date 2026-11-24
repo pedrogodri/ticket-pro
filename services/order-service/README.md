@@ -45,7 +45,7 @@ Identidade só pelo `X-User-Id` injetado pelo gateway; erros em `application/pro
 
 ```
 br.furb.ticketpro.order
-├── platform/        # RFC 0004: cópia do auth-service (ADR-0022) + SqsConsumerRunner, jobs/, db/UserScopedTransaction, outbox/RetentionJob
+├── platform/        # RFC 0004: cópia do auth-service (ADR-0022) + SqsConsumerRunner, jobs/, db/UserScopedTransaction, outbox/RetentionJob, tracing/Spans
 └── modules/orders/
     ├── web/            OrderController, CreateOrderRequest, OrderResponse, CursorCodec
     ├── application/    CreateOrder, OrderQueries, SagaHandlers, DeadlineScanner, OrderEvents
@@ -54,6 +54,15 @@ br.furb.ticketpro.order
 ```
 
 A API usa só o pool `app` (`orders_app`, RLS); consumidor, relay e scanner usam só o pool `worker` (`orders_worker`, `BYPASSRLS`). O `platform/` em Java é código do serviço (não é cópia gerada): correção nele deve entrar também nos outros serviços Java (ADR-0022).
+
+## Observabilidade
+
+A imagem traz o agente OpenTelemetry Java 2.34.0, com versão e sha256 fixados no `Dockerfile` ([ADR-0012](../../docs/adr/0012-opentelemetry-tracing.md), RFC 0004 §5.9). Ele só é carregado quando `OTEL_EXPORTER_OTLP_ENDPOINT` está definida e instrumenta HTTP, JDBC e AWS SDK. O `tracing/Spans` cria os spans de mensageria iguais aos do `shared/go`:
+
+- `process <tipo>` (consumer): filho do produtor e com link para ele; as queries do handler ficam dentro dele.
+- `publish <tipo>` (producer): no relay, filho do `traceparent` gravado no outbox; o `traceparent` da mensagem passa a ser o dele.
+
+Os laços de polling (relay, consumidor e jobs) rodam sob um contexto não amostrado (`Spans.unsampled()`), e o health check do Docker manda um `traceparent` com flag `00`. Assim o Jaeger (`http://localhost:16686`) mostra só pedidos e mensagens, sem as queries de fundo.
 
 ## Dados
 
@@ -77,6 +86,8 @@ O banco é `orders`, no container `orders-db`. Tabelas: `orders`, `outbox` e `pr
 | `ORDER_CREATED_VERSION` | não | 2 (1 ou 2) |
 | `OUTBOX_RETENTION_H`, `PROCESSED_MESSAGES_RETENTION_D` | não | 24, 7 (o job de retenção apaga o outbox já publicado e o `processed_messages` mais antigos que isso) |
 | `RETENTION_INTERVAL_MS`, `RETENTION_BATCH_SIZE` | não | 60000, 500 |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | não | `http://otel-collector:4317` (com esquema). Sem ela, o agente OTel não é carregado |
+| `OTEL_SERVICE_NAME`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_METRICS_EXPORTER`, `OTEL_LOGS_EXPORTER` | não | `order-service`, `grpc`, `none`, `none` |
 | `RESERVATION_TTL_MS`, `RESERVATION_SAFETY_MARGIN_MS` | não | 60000, 30000 — o boot falha se `RESERVATION_TTL_MS < ORDER_PAYMENT_TIMEOUT_MS + RESERVATION_SAFETY_MARGIN_MS` |
 
 O banco e o job de migration usam `db.env.example` (owner e senhas dos roles, só desenvolvimento). `contracts/` é cópia gerada por `scripts/sync-shared.sh`: não edite.
