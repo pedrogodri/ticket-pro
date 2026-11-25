@@ -1,5 +1,7 @@
 package br.furb.ticketpro.inventory.platform.config;
 
+import br.furb.ticketpro.inventory.modules.catalog.application.CatalogQueries;
+import br.furb.ticketpro.inventory.modules.catalog.infrastructure.CatalogRepository;
 import br.furb.ticketpro.inventory.platform.envelope.ContractValidator;
 import br.furb.ticketpro.inventory.platform.health.BrokerProbe;
 import br.furb.ticketpro.inventory.platform.health.DatabaseProbe;
@@ -86,6 +88,16 @@ public class AppConfigConfiguration {
         return false;
       }
     };
+  }
+
+  @Bean
+  public CatalogRepository catalogRepository() {
+    return new CatalogRepository();
+  }
+
+  @Bean
+  public CatalogQueries catalogQueries(DataSource appDataSource, CatalogRepository catalog) {
+    return new CatalogQueries(appDataSource, catalog);
   }
 
   @Bean(destroyMethod = "close")
