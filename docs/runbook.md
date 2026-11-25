@@ -48,10 +48,44 @@ Os tempos foram medidos no ensaio de 18/11, com a stack já no ar: uns 6 minutos
 | 12 | Bônus: autoescala | `scripts/demo-autoscale.sh` | ~40–90 s |
 | 13 | Bônus: OpenTelemetry, CQRS e IaC | Jaeger, `/me/tickets` e Terraform (abaixo) | ~2 min |
 
+### Na apresentação: `scripts/demo.sh`
+
+O enunciado pede para provocar a falha ao vivo e mostrar, pelos logs e pelo estado dos bancos, que o sistema se comportou como esperado. O `scripts/demo.sh` faz isso em três tempos para cada item da tabela:
+1. **Previsão:** mostra como a falha é provocada e o resultado esperado, e espera um Enter (dá tempo de explicar antes de executar).
+2. **Execução:** roda o script canônico do item (`f1`…`f8`, caminho feliz, bônus).
+3. **Evidência:** consulta os bancos e os logs. Para os cenários de pedido (caminho feliz, F1, F6, F7, surpresa), mostra o mesmo pedido em todos os serviços: saga e outbox no `orders-db`, reserva e ingressos no `inventory-db`, cobrança e estorno no `payments-db`, notificação e read model. Também mostra os logs desse pedido em ordem, com o serviço e a réplica, e o link do trace no Jaeger. Para F2–F4, mostra reservas, `processed_messages`, DLQ e duplicatas. Para F5, mostra a contagem por status e o setor. Para F8, mostra réplicas e cobranças.
+
+| Comando | Uso |
+|---|---|
+| `scripts/demo.sh` | menu: o professor escolhe, você digita `f1`…`f8`, `0`, `r`, `s`... |
+| `scripts/demo.sh f5` | um item direto |
+| `scripts/demo.sh order [orderId]` | evidência de um pedido em todos os bancos (padrão: o último) |
+| `scripts/demo.sh surprise <serviço> [segundos=10]` | falha surpresa (abaixo) |
+| `scripts/demo.sh all` | ensaio: tudo em sequência, uma linha por item, sem pausas |
+
+**Falha surpresa:** `scripts/demo.sh surprise inventory-service` mostra a previsão para aquele serviço e cria um usuário antes da queda. Em seguida:
+1. derruba todas as réplicas com `docker compose kill`;
+2. tenta comprar e mostra o status do pedido a cada 2 s;
+3. traz o serviço de volta, espera o estado final e mostra a evidência.
+
+O que esperar de cada serviço:
+
+| Serviço derrubado | Previsão |
+|---|---|
+| `gateway` | conexão recusada para o cliente; nada se perde lá dentro |
+| `auth-service` | cadastro e login dão 502, mas quem já tem token compra normalmente (JWT validado no gateway com o JWKS em cache) |
+| `order-service` | `/orders` dá 502; respostas de inventory e payment esperam na fila |
+| `inventory-service` | pedido aceito (202) e `PENDING`; ao voltar, reserva e a saga termina sozinha (ensaiado: `CONFIRMED`) |
+| `payment-service` | pedido em `AWAITING_PAYMENT`; fora por menos de 15 s confirma; por mais (`surprise payment-service 25`), cancela por `PAYMENT_TIMEOUT` e a aprovação atrasada vira estorno |
+| `notification-service` | compra confirma; o comprovante no S3 aparece quando ele volta |
+| `user-service` | `/me*` dá 502; ao voltar, a projeção alcança |
+| `<svc>-db` | escritas falham, mensagens sem ack voltam pelo visibility timeout e são processadas uma vez |
+| `ministack` | é o F6 (pause): matar o MiniStack apaga as filas em memória, então o script roda o F6 |
+
 Para rodar tudo de uma vez, por exemplo no ensaio:
 
 ```bash
-for f in scripts/f[1-8]-*.sh; do $f | tail -1; done
+scripts/demo.sh all
 ```
 
 ### 0. Caminho feliz (R3)
@@ -195,6 +229,6 @@ O payment sobe com latência de 20 s, maior que o deadline de 15 s do pedido ([c
 | `429` num script logo depois de outro | rate limit de login por IP (1/s, burst 5) | esperar uns 6 s; os scripts F1–F8 já refazem a requisição respeitando `Retry-After` |
 | Serviço `unhealthy` ou `wait-healthy` com timeout | primeiro boot lento ou falta de memória | `docker compose ps`, `docker compose logs <svc>`; subir a memória do Docker |
 | Filas sumiram depois de reiniciar o MiniStack | o MiniStack guarda SNS/SQS só em memória | `docker compose up -d --force-recreate infra-init` |
-| `auth-service` reiniciando no boot | subiu antes do segredo do JWT existir | esperado: `restart: on-failure` resolve sozinho em segundos |
+| `auth-service` reiniciando no boot | subiu antes do segredo do JWT existir | esperado: `restart: on-failure` resolve sozinho em segundos; se o MiniStack nem subiu (`UnknownHostException` no log), suba a stack inteira com `docker compose up -d` |
 | Algo ficou alterado depois de um script interrompido | o `trap` não rodou | `docker compose up -d` volta às réplicas e envs do compose |
 | Estado sujo entre ensaios | dados de execuções anteriores | `docker compose down -v && docker compose up -d --build` |
