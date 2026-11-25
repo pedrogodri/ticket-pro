@@ -1,0 +1,162 @@
+package br.furb.ticketpro.inventory.platform.config;
+
+import br.furb.ticketpro.inventory.platform.envelope.ContractValidator;
+import br.furb.ticketpro.inventory.platform.health.BrokerProbe;
+import br.furb.ticketpro.inventory.platform.health.DatabaseProbe;
+import br.furb.ticketpro.inventory.platform.jobs.PeriodicJobRunner;
+import br.furb.ticketpro.inventory.platform.messaging.AwsClients;
+import br.furb.ticketpro.inventory.platform.messaging.MessageHandler;
+import br.furb.ticketpro.inventory.platform.messaging.SnsOutboxPublisher;
+import br.furb.ticketpro.inventory.platform.messaging.SqsConsumer;
+import br.furb.ticketpro.inventory.platform.messaging.SqsConsumerProperties;
+import br.furb.ticketpro.inventory.platform.messaging.SqsConsumerRunner;
+import br.furb.ticketpro.inventory.platform.outbox.OutboxRelay;
+import br.furb.ticketpro.inventory.platform.outbox.OutboxRelayRunner;
+import br.furb.ticketpro.inventory.platform.outbox.RetentionJob;
+import com.zaxxer.hikari.HikariDataSource;
+import java.net.URI;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
+import javax.sql.DataSource;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.core.env.Environment;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.sns.SnsClient;
+import software.amazon.awssdk.services.sns.SnsClientBuilder;
+import software.amazon.awssdk.services.sqs.SqsClient;
+import software.amazon.awssdk.services.sqs.SqsClientBuilder;
+
+/**
+ * Validates environment configuration at boot (an invalid variable aborts startup) and wires the
+ * platform. Controllers get only the app pool; consumer, relay and jobs get only the worker pool
+ * (RFC 0004 decision 4). The handler map is empty until the reservation handlers land (RFC 0006,
+ * tasks T06 and T07): unknown messages go to the DLQ and never stay stuck in the queue.
+ */
+@Configuration(proxyBeanMethods = false)
+public class AppConfigConfiguration {
+
+  /** Connections beyond the consumer's: relay, expiry job, retention and slack (RFC 0004 §5.3). */
+  private static final int WORKER_POOL_EXTRA = 4;
+
+  @Bean
+  public AppConfig appConfig(Environment environment) {
+    return AppConfig.from(environment::getProperty);
+  }
+
+  /** API role (RLS applies). Starts even if the database is down: readiness reports it. */
+  @Bean
+  @Primary
+  public HikariDataSource appDataSource(AppConfig config) {
+    return dataSource(config.database(), "inventory-app", 10);
+  }
+
+  /** Worker role (BYPASSRLS): outbox relay, consumer and jobs. */
+  @Bean
+  @Qualifier("worker")
+  public HikariDataSource workerDataSource(AppConfig config) {
+    return dataSource(
+        config.databaseWorker(),
+        "inventory-worker",
+        config.consumer().concurrency() + WORKER_POOL_EXTRA);
+  }
+
+  private static HikariDataSource dataSource(DatabaseUrl url, String pool, int size) {
+    HikariDataSource ds = new HikariDataSource();
+    ds.setPoolName(pool);
+    ds.setJdbcUrl(url.jdbcUrl());
+    ds.setUsername(url.user());
+    ds.setPassword(url.password());
+    ds.setMaximumPoolSize(size);
+    ds.setInitializationFailTimeout(-1);
+    ds.setConnectionTimeout(2000);
+    return ds;
+  }
+
+  @Bean
+  public DatabaseProbe databaseProbe(DataSource appDataSource) {
+    return () -> {
+      try (Connection c = appDataSource.getConnection()) {
+        return c.isValid(2);
+      } catch (SQLException e) {
+        return false;
+      }
+    };
+  }
+
+  @Bean(destroyMethod = "close")
+  public SnsClient snsClient(AppConfig config) {
+    SnsClientBuilder builder =
+        SnsClient.builder()
+            .region(Region.of(config.awsRegion()))
+            .overrideConfiguration(AwsClients.overrideConfiguration(config.httpClientTimeout()));
+    config.awsEndpointUrl().map(URI::create).ifPresent(builder::endpointOverride);
+    return builder.build();
+  }
+
+  @Bean(destroyMethod = "close")
+  public SqsClient sqsClient(AppConfig config) {
+    SqsClientBuilder builder =
+        SqsClient.builder()
+            .region(Region.of(config.awsRegion()))
+            .overrideConfiguration(AwsClients.overrideConfiguration(config.httpClientTimeout()));
+    config.awsEndpointUrl().map(URI::create).ifPresent(builder::endpointOverride);
+    return builder.build();
+  }
+
+  @Bean
+  public OutboxRelay outboxRelay(
+      @Qualifier("worker") DataSource workerDataSource, SnsClient sns, AppConfig config) {
+    return new OutboxRelay(workerDataSource, new SnsOutboxPublisher(sns), config.outbox());
+  }
+
+  @Bean
+  public OutboxRelayRunner outboxRelayRunner(OutboxRelay relay) {
+    return new OutboxRelayRunner(relay);
+  }
+
+  @Bean
+  public SqsConsumer sqsConsumer(
+      SqsClient sqs, @Qualifier("worker") DataSource workerDataSource, AppConfig config) {
+    Map<String, MessageHandler> handlers = Map.of();
+    return new SqsConsumer(
+        sqs,
+        workerDataSource,
+        new ContractValidator(config.contractsDir()),
+        handlers,
+        new SqsConsumerProperties(
+            config.consumer().queueUrl(),
+            config.serviceName(),
+            config.consumer().concurrency(),
+            config.consumer().waitTimeSeconds(),
+            config.httpClientTimeout()));
+  }
+
+  @Bean
+  public SqsConsumerRunner sqsConsumerRunner(SqsConsumer consumer, AppConfig config) {
+    return new SqsConsumerRunner(consumer, config.shutdownTimeout());
+  }
+
+  @Bean
+  public PeriodicJobRunner periodicJobRunner(
+      @Qualifier("worker") DataSource workerDataSource, AppConfig config) {
+    return new PeriodicJobRunner(
+        List.of(
+            new RetentionJob(
+                workerDataSource,
+                config.retention().outbox(),
+                config.retention().processedMessages(),
+                config.retention().interval(),
+                config.retention().batchSize())));
+  }
+
+  /** Degraded when the relay cannot publish or the consumer cannot receive (RFC 0003 §5.9). */
+  @Bean
+  public BrokerProbe brokerProbe(OutboxRelay relay, SqsConsumer consumer) {
+    return () -> relay.brokerUp() && consumer.brokerUp();
+  }
+}
