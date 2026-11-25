@@ -55,7 +55,8 @@ class UpcasterTest {
 
   @Test
   void malformedFieldsArePoison() {
-    assertThatThrownBy(() -> Upcaster.orderCreated(1, json(BASE.replace("\"quantity\":2", "\"quantity\":\"x\""))))
+    assertThatThrownBy(() ->
+            Upcaster.orderCreated(1, json(BASE.replace("\"quantity\":2", "\"quantity\":\"x\""))))
         .isInstanceOf(InvalidMessageException.class);
     assertThatThrownBy(
             () -> Upcaster.orderCreated(1, json(BASE.replace("0193a6f0-2222", "nope-2222"))))
