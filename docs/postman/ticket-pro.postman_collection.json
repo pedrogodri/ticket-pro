@@ -2,7 +2,7 @@
   "info": {
     "name": "Ticket Pro — Gateway (cenários bons e ruins + F1–F8)",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Tudo passa pelo gateway (`{{baseUrl}}`, padrão http://localhost:8080). Suba a stack: `docker compose up --build -d && scripts/wait-healthy.sh`.\n\nLegenda: **⏳ = pendente** (endpoint ainda não existe; hoje responde 404, a collection já descreve o contrato-alvo). Hoje funcionam: health, register, login, /me, /me/tickets, /orders (sem o inventory o pedido fica PENDING) e as regras do gateway (401/404/413/429).\n\nOrdem: **00 Setup** (cria usuários A/B e descobre evento/setor) → demais pastas. As pastas de cenário (05) têm passos **manuais** (comandos `docker`/scripts) descritos em cada request; as falhas de infraestrutura não existem via HTTP.\n\nSeed: evento \"Festival de Verão 2026\", setor Pista (estoque grande) e setor F5 com 10 unidades (`f5SectorId`).\n\nRodar no terminal: `npx newman run docs/postman/ticket-pro.postman_collection.json -e docs/postman/ticket-pro.local.postman_environment.json --folder \"00 · Setup (rode primeiro)\"`."
+    "description": "Tudo passa pelo gateway (`{{baseUrl}}`, padrão http://localhost:8080). Suba a stack: `docker compose up --build -d && scripts/wait-healthy.sh`.\n\nTodos os serviços estão entregues: os requests validam sozinhos. **⏳** sobra só em `/auth/refresh` e `/auth/logout`, que o auth-service não implementa (a revogação é mostrada por `scripts/gateway-check.sh`).\n\nOrdem: **00 Setup** (cria usuários A/B e descobre evento/setor) → demais pastas. As pastas de cenário (05) têm passos **manuais** (comandos `docker`/scripts) descritos em cada request; as falhas de infraestrutura não existem via HTTP.\n\nSeed: evento \"Festival de Verão 2026\", setor Pista (estoque grande) e setor F5 com 10 unidades (`f5SectorId`).\n\nRodar no terminal: `npx newman run docs/postman/ticket-pro.postman_collection.json -e docs/postman/ticket-pro.local.postman_environment.json --folder \"00 · Setup (rode primeiro)\"`."
   },
   "variable": [
     {
@@ -185,17 +185,19 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "(async () => {",
                   "",
-                  "const email = 'pm-' + pm.variables.replaceIn('{{$guid}}') + '@exemplo.com';",
-                  "const pass = pm.environment.get('password');",
-                  "const post = (path, body) => new Promise((res, rej) => pm.sendRequest({ url: pm.environment.get('baseUrl') + path, method: 'POST',",
-                  "  header: { 'Content-Type': 'application/json' }, body: { mode: 'raw', raw: JSON.stringify(body) } }, (e, r) => e ? rej(e) : res(r)));",
-                  "const retry = async (path, body) => { for (let i = 0; i < 12; i++) { const r = await post(path, body); if (r.code !== 429) return r; await new Promise(s => setTimeout(s, (Number(r.headers.get('Retry-After')) || 1) * 1000)); } throw new Error('429 persistente'); };",
-                  "await retry('/auth/register', { email, password: pass, name: 'Postman user' });",
-                  "const l = (await retry('/auth/login', { email, password: pass })).json();",
-                  "pm.collectionVariables.set('userEmail', email);",
-                  "pm.collectionVariables.set('userToken', l.accessToken);",
-                  "pm.collectionVariables.set('userRefresh', l.refreshToken);"
+                  "  const email = 'pm-' + pm.variables.replaceIn('{{$guid}}') + '@exemplo.com';",
+                  "  const pass = pm.environment.get('password');",
+                  "  const post = (path, body) => new Promise((res, rej) => pm.sendRequest({ url: pm.environment.get('baseUrl') + path, method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' }, body: { mode: 'raw', raw: JSON.stringify(body) } }, (e, r) => e ? rej(e) : res(r)));",
+                  "  const retry = async (path, body) => { for (let i = 0; i < 12; i++) { const r = await post(path, body); if (r.code !== 429) return r; await new Promise(s => setTimeout(s, (Number(r.headers.get('Retry-After')) || 1) * 1000)); } throw new Error('429 persistente'); };",
+                  "  await retry('/auth/register', { email, password: pass, name: 'Postman user' });",
+                  "  const l = (await retry('/auth/login', { email, password: pass })).json();",
+                  "  pm.collectionVariables.set('userEmail', email);",
+                  "  pm.collectionVariables.set('userToken', l.accessToken);",
+                  "  pm.collectionVariables.set('userRefresh', l.refreshToken);",
+                  "})().catch(err => pm.test('script sem erro', () => { throw err; }));"
                 ]
               }
             },
@@ -235,17 +237,19 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "(async () => {",
                   "",
-                  "const email = 'pm-' + pm.variables.replaceIn('{{$guid}}') + '@exemplo.com';",
-                  "const pass = pm.environment.get('password');",
-                  "const post = (path, body) => new Promise((res, rej) => pm.sendRequest({ url: pm.environment.get('baseUrl') + path, method: 'POST',",
-                  "  header: { 'Content-Type': 'application/json' }, body: { mode: 'raw', raw: JSON.stringify(body) } }, (e, r) => e ? rej(e) : res(r)));",
-                  "const retry = async (path, body) => { for (let i = 0; i < 12; i++) { const r = await post(path, body); if (r.code !== 429) return r; await new Promise(s => setTimeout(s, (Number(r.headers.get('Retry-After')) || 1) * 1000)); } throw new Error('429 persistente'); };",
-                  "await retry('/auth/register', { email, password: pass, name: 'Postman other' });",
-                  "const l = (await retry('/auth/login', { email, password: pass })).json();",
-                  "pm.collectionVariables.set('otherEmail', email);",
-                  "pm.collectionVariables.set('otherToken', l.accessToken);",
-                  "pm.collectionVariables.set('otherRefresh', l.refreshToken);"
+                  "  const email = 'pm-' + pm.variables.replaceIn('{{$guid}}') + '@exemplo.com';",
+                  "  const pass = pm.environment.get('password');",
+                  "  const post = (path, body) => new Promise((res, rej) => pm.sendRequest({ url: pm.environment.get('baseUrl') + path, method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' }, body: { mode: 'raw', raw: JSON.stringify(body) } }, (e, r) => e ? rej(e) : res(r)));",
+                  "  const retry = async (path, body) => { for (let i = 0; i < 12; i++) { const r = await post(path, body); if (r.code !== 429) return r; await new Promise(s => setTimeout(s, (Number(r.headers.get('Retry-After')) || 1) * 1000)); } throw new Error('429 persistente'); };",
+                  "  await retry('/auth/register', { email, password: pass, name: 'Postman other' });",
+                  "  const l = (await retry('/auth/login', { email, password: pass })).json();",
+                  "  pm.collectionVariables.set('otherEmail', email);",
+                  "  pm.collectionVariables.set('otherToken', l.accessToken);",
+                  "  pm.collectionVariables.set('otherRefresh', l.refreshToken);",
+                  "})().catch(err => pm.test('script sem erro', () => { throw err; }));"
                 ]
               }
             },
@@ -261,7 +265,7 @@
           ]
         },
         {
-          "name": "⏳ Descobrir evento e setor (seed)",
+          "name": "Descobrir evento e setor (seed)",
           "request": {
             "method": "GET",
             "header": [],
@@ -284,7 +288,7 @@
                 }
               ]
             },
-            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+            "description": ""
           },
           "event": [
             {
@@ -433,7 +437,7 @@
                   "mode": "raw",
                   "raw": "{\n  \"refreshToken\": \"{{flowRefresh}}\"\n}"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n`/auth/refresh` é rota pública: autentica pelo refresh token do corpo (RFC 0002 §5.5).",
+                "description": "⏳ **Fora do escopo entregue:** o auth-service implementa register, login e JWKS; `/auth/refresh` e `/auth/logout` não existem (404). A revogação de token é demonstrada por `scripts/gateway-check.sh`, que publica `TokenRevoked` direto no tópico `ticketpro-auth`.\n\n`/auth/refresh` é rota pública: autentica pelo refresh token do corpo (RFC 0002 §5.5).",
                 "auth": {
                   "type": "noauth"
                 }
@@ -455,7 +459,7 @@
               ]
             },
             {
-              "name": "Acesso com o token novo",
+              "name": "⏳ Acesso com o token novo",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -477,7 +481,8 @@
                       "type": "string"
                     }
                   ]
-                }
+                },
+                "description": "⏳ **Fora do escopo entregue:** usa o access token devolvido pelo `/auth/refresh`, que o auth-service não implementa (404)."
               },
               "event": [
                 {
@@ -506,7 +511,7 @@
                     "logout"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nPublica `TokenRevoked`; o gateway coloca o `jti` na blacklist (Redis).",
+                "description": "⏳ **Fora do escopo entregue:** o auth-service implementa register, login e JWKS; `/auth/refresh` e `/auth/logout` não existem (404). A revogação de token é demonstrada por `scripts/gateway-check.sh`, que publica `TokenRevoked` direto no tópico `ticketpro-auth`.\n\nPublica `TokenRevoked`; o gateway coloca o `jti` na blacklist (Redis).",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -766,7 +771,7 @@
                 "auth": {
                   "type": "noauth"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": "⏳ **Fora do escopo entregue:** o auth-service implementa register, login e JWKS; `/auth/refresh` e `/auth/logout` não existem (404). A revogação de token é demonstrada por `scripts/gateway-check.sh`, que publica `TokenRevoked` direto no tópico `ticketpro-auth`."
               },
               "event": [
                 {
@@ -804,7 +809,7 @@
                   "mode": "raw",
                   "raw": "{\n  \"refreshToken\": \"{{flowOldRefresh}}\"\n}"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRode depois de \"Refresh\" do caminho feliz. Detecção de reuso revoga a família inteira (RFC 0002 §5.1).",
+                "description": "⏳ **Fora do escopo entregue:** o auth-service implementa register, login e JWKS; `/auth/refresh` e `/auth/logout` não existem (404). A revogação de token é demonstrada por `scripts/gateway-check.sh`, que publica `TokenRevoked` direto no tópico `ticketpro-auth`.\n\nRode depois de \"Refresh\" do caminho feliz. Detecção de reuso revoga a família inteira (RFC 0002 §5.1).",
                 "auth": {
                   "type": "noauth"
                 }
@@ -845,7 +850,7 @@
                   "mode": "raw",
                   "raw": "{\n  \"refreshToken\": \"{{flowRefresh}}\"\n}"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nDepende do reuso acima.",
+                "description": "⏳ **Fora do escopo entregue:** o auth-service implementa register, login e JWKS; `/auth/refresh` e `/auth/logout` não existem (404). A revogação de token é demonstrada por `scripts/gateway-check.sh`, que publica `TokenRevoked` direto no tópico `ticketpro-auth`.\n\nDepende do reuso acima.",
                 "auth": {
                   "type": "noauth"
                 }
@@ -876,7 +881,7 @@
                     "me"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nRode depois do Logout. Depende do `TokenRevoked` ter chegado ao gateway (assíncrono, ~1 s).",
+                "description": "⏳ **Fora do escopo entregue:** o auth-service implementa register, login e JWKS; `/auth/refresh` e `/auth/logout` não existem (404). A revogação de token é demonstrada por `scripts/gateway-check.sh`, que publica `TokenRevoked` direto no tópico `ticketpro-auth`.\n\nRode depois do Logout. Depende do `TokenRevoked` ter chegado ao gateway (assíncrono, ~1 s).",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -1022,7 +1027,7 @@
                 "auth": {
                   "type": "noauth"
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+                "description": "⏳ **Fora do escopo entregue:** o auth-service implementa register, login e JWKS; `/auth/refresh` e `/auth/logout` não existem (404). A revogação de token é demonstrada por `scripts/gateway-check.sh`, que publica `TokenRevoked` direto no tópico `ticketpro-auth`."
               },
               "event": [
                 {
@@ -1163,7 +1168,7 @@
       "name": "02 · Catálogo (inventory)",
       "item": [
         {
-          "name": "⏳ Listar eventos",
+          "name": "Listar eventos",
           "request": {
             "method": "GET",
             "header": [],
@@ -1186,7 +1191,7 @@
                 }
               ]
             },
-            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+            "description": ""
           },
           "event": [
             {
@@ -1202,7 +1207,7 @@
           ]
         },
         {
-          "name": "⏳ Listar eventos com limit=1",
+          "name": "Listar eventos com limit=1",
           "request": {
             "method": "GET",
             "header": [],
@@ -1213,6 +1218,12 @@
               ],
               "path": [
                 "events"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "1"
+                }
               ]
             },
             "auth": {
@@ -1225,7 +1236,7 @@
                 }
               ]
             },
-            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+            "description": ""
           },
           "event": [
             {
@@ -1241,7 +1252,7 @@
           ]
         },
         {
-          "name": "⏳ Detalhe do evento (setores + available)",
+          "name": "Detalhe do evento (setores + available)",
           "request": {
             "method": "GET",
             "header": [],
@@ -1265,7 +1276,7 @@
                 }
               ]
             },
-            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+            "description": ""
           },
           "event": [
             {
@@ -1281,7 +1292,7 @@
           ]
         },
         {
-          "name": "⏳ Evento inexistente → 404",
+          "name": "Evento inexistente → 404",
           "request": {
             "method": "GET",
             "header": [],
@@ -1305,7 +1316,7 @@
                 }
               ]
             },
-            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+            "description": ""
           },
           "event": [
             {
@@ -1320,7 +1331,7 @@
           ]
         },
         {
-          "name": "⏳ Id de evento inválido → 400/404",
+          "name": "Id de evento inválido → 400/404",
           "request": {
             "method": "GET",
             "header": [],
@@ -1344,7 +1355,7 @@
                 }
               ]
             },
-            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+            "description": ""
           },
           "event": [
             {
@@ -1359,7 +1370,7 @@
           ]
         },
         {
-          "name": "⏳ Catálogo sem token → 401",
+          "name": "Catálogo sem token → 401",
           "request": {
             "method": "GET",
             "header": [],
@@ -1375,7 +1386,7 @@
             "auth": {
               "type": "noauth"
             },
-            "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\n"
+            "description": ""
           },
           "event": [
             {
@@ -1398,7 +1409,7 @@
           "name": "Caminho feliz",
           "item": [
             {
-              "name": "⏳ Estoque antes",
+              "name": "Estoque antes",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -1412,7 +1423,7 @@
                     "{{eventId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nGuarda o `available` do setor.",
+                "description": "Guarda o `available` do setor.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -1503,7 +1514,7 @@
               ]
             },
             {
-              "name": "⏳ GET /orders/{id} até estado final",
+              "name": "GET /orders/{id} até estado final",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -1517,7 +1528,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service (sem ele o pedido fica PENDING e o polling desiste em 30 s).\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "description": "Repete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -1621,6 +1632,12 @@
                   ],
                   "path": [
                     "orders"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
                   ]
                 },
                 "auth": {
@@ -1649,7 +1666,7 @@
               ]
             },
             {
-              "name": "⏳ Meus ingressos (read model)",
+              "name": "Meus ingressos (read model)",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -1661,9 +1678,15 @@
                   "path": [
                     "me",
                     "tickets"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "50"
+                    }
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nCQRS: `TicketsIssued` tem dois consumidores (user → este read model; notification → recibo no S3).",
+                "description": "CQRS: `TicketsIssued` tem dois consumidores (user → este read model; notification → recibo no S3).",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -1693,7 +1716,7 @@
               ]
             },
             {
-              "name": "⏳ Estoque depois",
+              "name": "Estoque depois",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -1707,7 +1730,7 @@
                     "{{eventId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: endpoint ainda não implementado (hoje responde 404). A collection já descreve o contrato-alvo (RFC 0002/0005, docs/arquitetura.md).\n\nConfirmado: `availableBefore - 2`. Cancelado: igual ao antes.",
+                "description": "Confirmado: `availableBefore - 2`. Cancelado: igual ao antes.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -2285,6 +2308,12 @@
                   ],
                   "path": [
                     "orders"
+                  ],
+                  "query": [
+                    {
+                      "key": "limit",
+                      "value": "500"
+                    }
                   ]
                 },
                 "auth": {
@@ -2394,15 +2423,17 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
+                      "(async () => {",
                       "",
-                      "const url = pm.environment.get('baseUrl') + '/auth/login';",
-                      "const hit = () => new Promise(res => pm.sendRequest({ url, method: 'POST', header: { 'Content-Type': 'application/json' }, body: { mode: 'raw', raw: JSON.stringify({ email: 'rl@exemplo.com', password: 'errada errada' }) } }, (e, r) => res(r)));",
-                      "const rs = await Promise.all(Array.from({ length: 8 }, hit));",
-                      "const codes = rs.map(r => r.code);",
-                      "console.log(codes);",
-                      "pm.test('algum 429 (AUTH_LOGIN_BURST=5)', () => pm.expect(codes).to.include(429));",
-                      "const limited = rs.find(r => r.code === 429);",
-                      "pm.test('Retry-After presente', () => pm.expect(limited.headers.get('Retry-After')).to.be.ok);"
+                      "  const url = pm.environment.get('baseUrl') + '/auth/login';",
+                      "  const hit = () => new Promise(res => pm.sendRequest({ url, method: 'POST', header: { 'Content-Type': 'application/json' }, body: { mode: 'raw', raw: JSON.stringify({ email: 'rl@exemplo.com', password: 'errada errada' }) } }, (e, r) => res(r)));",
+                      "  const rs = await Promise.all(Array.from({ length: 8 }, hit));",
+                      "  const codes = rs.map(r => r.code);",
+                      "  console.log(codes);",
+                      "  pm.test('algum 429 (AUTH_LOGIN_BURST=5)', () => pm.expect(codes).to.include(429));",
+                      "  const limited = rs.find(r => r.code === 429);",
+                      "  pm.test('Retry-After presente', () => pm.expect(limited.headers.get('Retry-After')).to.be.ok);",
+                      "})().catch(err => pm.test('script sem erro', () => { throw err; }));"
                     ]
                   }
                 }
@@ -2508,6 +2539,49 @@
               }
             }
           ]
+        },
+        {
+          "name": "GET /me/orders (compras confirmadas, read model)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('items + nextCursor', () => { pm.expect(b).to.have.property('items'); pm.expect(b).to.have.property('nextCursor'); });",
+                  "pm.test('só pedidos confirmados do próprio usuário', () => b.items.forEach(o => pm.expect(o).to.have.property('confirmedAt')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/orders?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "orders"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "CQRS: projeção de `OrderConfirmed` + `TicketsIssued` no user-service. `ticketsIssued < quantity` = ingressos ainda a caminho. O status em tempo real de qualquer pedido continua em `GET /orders/{id}` (order-service)."
+          }
         },
         {
           "name": "GET /me sem token → 401",
@@ -2627,7 +2701,7 @@
           "name": "F1 · Compensação (PAYMENT_FAILURE_RATE=1)",
           "item": [
             {
-              "name": "⏳ 1) Recriar payment com falha 100%",
+              "name": "1) Recriar payment com falha 100%",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -2641,7 +2715,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nPAYMENT_FAILURE_RATE=1 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
+                "description": "```bash\nPAYMENT_FAILURE_RATE=1 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -2659,7 +2733,7 @@
               ]
             },
             {
-              "name": "⏳ 2) Estoque antes",
+              "name": "2) Estoque antes",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -2683,7 +2757,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -2701,7 +2775,7 @@
               ]
             },
             {
-              "name": "⏳ 3) Criar pedido (qty 2)",
+              "name": "3) Criar pedido (qty 2)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -2737,7 +2811,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -2755,7 +2829,7 @@
               ]
             },
             {
-              "name": "⏳ 4) Pedido → CANCELLED(PAYMENT_FAILED)",
+              "name": "4) Pedido → CANCELLED(PAYMENT_FAILED)",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -2769,7 +2843,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "description": "Repete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -2807,7 +2881,7 @@
               ]
             },
             {
-              "name": "⏳ 5) Estoque devolvido",
+              "name": "5) Estoque devolvido",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -2821,7 +2895,7 @@
                     "{{eventId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nA liberação é assíncrona (`OrderCancelled` → inventory). Se falhar, espere 1–2 s e envie de novo.",
+                "description": "A liberação é assíncrona (`OrderCancelled` → inventory). Se falhar, espere 1–2 s e envie de novo.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -2848,7 +2922,7 @@
               ]
             },
             {
-              "name": "⏳ 6) Restaurar payment",
+              "name": "6) Restaurar payment",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -2862,7 +2936,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
+                "description": "```bash\ndocker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -2886,7 +2960,7 @@
           "name": "F2 · Serviço morre no meio (docker kill)",
           "item": [
             {
-              "name": "⏳ 1) Criar pedido",
+              "name": "1) Criar pedido",
               "request": {
                 "method": "POST",
                 "header": [
@@ -2922,7 +2996,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -2940,7 +3014,7 @@
               ]
             },
             {
-              "name": "⏳ 2) Matar uma réplica logo depois",
+              "name": "2) Matar uma réplica logo depois",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -2954,7 +3028,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker kill $(docker compose ps -q inventory-service | head -1)\n```",
+                "description": "```bash\ndocker kill $(docker compose ps -q inventory-service | head -1)\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -2972,7 +3046,7 @@
               ]
             },
             {
-              "name": "⏳ 3) Pedido ainda chega ao final",
+              "name": "3) Pedido ainda chega ao final",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -2986,7 +3060,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nA outra réplica assume após o visibility timeout.",
+                "description": "A outra réplica assume após o visibility timeout.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -3024,7 +3098,7 @@
               ]
             },
             {
-              "name": "⏳ 4) Conferir exatamente uma reserva",
+              "name": "4) Conferir exatamente uma reserva",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3038,7 +3112,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker compose exec -T inventory-db psql -U inventory_owner -d inventory -tAc \"SELECT count(*) FROM reservations WHERE order_id='<orderId>'\"   # = 1\ndocker compose up -d --no-deps inventory-service\n```",
+                "description": "```bash\ndocker compose exec -T inventory-db psql -U inventory_owner -d inventory -tAc \"SELECT count(*) FROM reservations WHERE order_id='<orderId>'\"   # = 1\ndocker compose up -d --no-deps inventory-service\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3062,7 +3136,7 @@
           "name": "F3 · Mensagem duplicada",
           "item": [
             {
-              "name": "⏳ 1) Pedido com chave fixa",
+              "name": "1) Pedido com chave fixa",
               "request": {
                 "method": "POST",
                 "header": [
@@ -3098,7 +3172,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -3125,7 +3199,7 @@
               ]
             },
             {
-              "name": "⏳ 2) Repetir a mesma chave 5x → sempre o mesmo pedido",
+              "name": "2) Repetir a mesma chave 5x → sempre o mesmo pedido",
               "request": {
                 "method": "POST",
                 "header": [
@@ -3161,7 +3235,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -3169,20 +3243,22 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
+                      "(async () => {",
                       "",
-                      "const orderId = pm.collectionVariables.get('orderId');",
-                      "const hit = () => new Promise(res => pm.sendRequest({ url: pm.environment.get('baseUrl') + '/orders', method: 'POST', header: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pm.collectionVariables.get('userToken'), 'Idempotency-Key': pm.collectionVariables.get('f3Key') },",
-                      "  body: { mode: 'raw', raw: JSON.stringify({ eventId: pm.collectionVariables.get('eventId'), sectorId: pm.collectionVariables.get('sectorId'), quantity: 2 }) } }, (e, r) => res(r)));",
-                      "const rs = [];",
-                      "for (let i = 0; i < 4; i++) rs.push(await hit());",
-                      "pm.test('5 chamadas, 1 pedido', () => { [pm.response, ...rs].forEach(r => { pm.expect(r.code).to.eql(200); pm.expect(r.json().orderId).to.eql(orderId); }); });"
+                      "  const orderId = pm.collectionVariables.get('orderId');",
+                      "  const hit = () => new Promise(res => pm.sendRequest({ url: pm.environment.get('baseUrl') + '/orders', method: 'POST', header: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + pm.collectionVariables.get('userToken'), 'Idempotency-Key': pm.collectionVariables.get('f3Key') },",
+                      "    body: { mode: 'raw', raw: JSON.stringify({ eventId: pm.collectionVariables.get('eventId'), sectorId: pm.collectionVariables.get('sectorId'), quantity: 2 }) } }, (e, r) => res(r)));",
+                      "  const rs = [];",
+                      "  for (let i = 0; i < 4; i++) rs.push(await hit());",
+                      "  pm.test('5 chamadas, 1 pedido', () => { [pm.response, ...rs].forEach(r => { pm.expect(r.code).to.eql(200); pm.expect(r.json().orderId).to.eql(orderId); }); });",
+                      "})().catch(err => pm.test('script sem erro', () => { throw err; }));"
                     ]
                   }
                 }
               ]
             },
             {
-              "name": "⏳ 3) Duplicata no broker (5x o mesmo messageId)",
+              "name": "3) Duplicata no broker (5x o mesmo messageId)",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3196,7 +3272,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nscripts/f3-duplicate.sh\n```",
+                "description": "```bash\nscripts/f3-duplicate.sh\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3220,7 +3296,7 @@
           "name": "F4 · Mensagem venenosa → DLQ",
           "item": [
             {
-              "name": "⏳ 1) Publicar OrderCreated inválido",
+              "name": "1) Publicar OrderCreated inválido",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3234,7 +3310,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nscripts/f4-poison.sh\n```",
+                "description": "```bash\nscripts/f4-poison.sh\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3252,7 +3328,7 @@
               ]
             },
             {
-              "name": "⏳ 2) Pedido válido logo depois",
+              "name": "2) Pedido válido logo depois",
               "request": {
                 "method": "POST",
                 "header": [
@@ -3288,7 +3364,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -3306,7 +3382,7 @@
               ]
             },
             {
-              "name": "⏳ 3) Pedido válido segue normalmente",
+              "name": "3) Pedido válido segue normalmente",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3320,7 +3396,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "description": "Repete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -3358,7 +3434,7 @@
               ]
             },
             {
-              "name": "⏳ 4) Inspecionar a DLQ",
+              "name": "4) Inspecionar a DLQ",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3372,7 +3448,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nscripts/dlq.sh\n```",
+                "description": "```bash\nscripts/dlq.sh\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3396,7 +3472,7 @@
           "name": "F5 · Corrida pelo recurso (100 req / 10 unidades)",
           "item": [
             {
-              "name": "⏳ 0) Resetar o setor F5 e payment sem falha",
+              "name": "0) Resetar o setor F5 e payment sem falha",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3410,7 +3486,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nPAYMENT_FAILURE_RATE=0 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n# setor F5: 10 unidades (id 0193a6f0-4444-7000-8000-0000000000f5), veja scripts/f5-race.sh\n```",
+                "description": "```bash\nPAYMENT_FAILURE_RATE=0 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n# setor F5: 10 unidades (id 0193a6f0-4444-7000-8000-0000000000f5), veja scripts/f5-race.sh\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3428,7 +3504,7 @@
               ]
             },
             {
-              "name": "⏳ 1) Disparar 100 pedidos concorrentes (20 usuários × 5)",
+              "name": "1) Disparar 100 pedidos concorrentes (20 usuários × 5)",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3442,7 +3518,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nSimula a rajada com `pm.sendRequest` assíncrono (concorrência real no cliente). Para o teste canônico, use `scripts/f5-race.sh`.",
+                "description": "Simula a rajada com `pm.sendRequest` assíncrono (concorrência real no cliente). Para o teste canônico, use `scripts/f5-race.sh`.",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3463,33 +3539,35 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
+                      "(async () => {",
                       "",
-                      "const base = pm.environment.get('baseUrl'), pass = pm.environment.get('password');",
-                      "const post = (path, body, headers = {}) => new Promise(res => pm.sendRequest({ url: base + path, method: 'POST', header: { 'Content-Type': 'application/json', ...headers }, body: { mode: 'raw', raw: JSON.stringify(body) } }, (e, r) => res(r)));",
-                      "const retry = async (path, body, headers) => { for (let i = 0; i < 15; i++) { const r = await post(path, body, headers); if (r.code !== 429) return r; await new Promise(s => setTimeout(s, (Number(r.headers.get('Retry-After')) || 1) * 1000)); } return null; };",
-                      "const eventId = pm.collectionVariables.get('eventId'), sectorId = pm.environment.get('f5SectorId');",
-                      "const tokens = [];",
-                      "for (let u = 0; u < 20; u++) {",
-                      "  const email = 'f5-' + Date.now() + '-' + u + '@exemplo.com';",
-                      "  await retry('/auth/register', { email, password: pass, name: 'F5 ' + u });",
-                      "  const l = await retry('/auth/login', { email, password: pass });",
-                      "  tokens.push(l.json().accessToken);",
-                      "}",
-                      "const t0 = Date.now();",
-                      "const ids = [];",
-                      "await Promise.all(tokens.flatMap(tk => Array.from({ length: 5 }, async () => {",
-                      "  const r = await retry('/orders', { eventId, sectorId, quantity: 1 }, { Authorization: 'Bearer ' + tk, 'Idempotency-Key': pm.variables.replaceIn('{{$guid}}') });",
-                      "  if (r && r.code === 202) ids.push({ id: r.json().orderId, tk });",
-                      "})));",
-                      "pm.test('100 pedidos aceitos (202) em ' + (Date.now() - t0) + ' ms', () => pm.expect(ids.length).to.eql(100));",
-                      "pm.collectionVariables.set('f5Orders', JSON.stringify(ids));"
+                      "  const base = pm.environment.get('baseUrl'), pass = pm.environment.get('password');",
+                      "  const post = (path, body, headers = {}) => new Promise(res => pm.sendRequest({ url: base + path, method: 'POST', header: { 'Content-Type': 'application/json', ...headers }, body: { mode: 'raw', raw: JSON.stringify(body) } }, (e, r) => res(r)));",
+                      "  const retry = async (path, body, headers) => { for (let i = 0; i < 15; i++) { const r = await post(path, body, headers); if (r.code !== 429) return r; await new Promise(s => setTimeout(s, (Number(r.headers.get('Retry-After')) || 1) * 1000)); } return null; };",
+                      "  const eventId = pm.collectionVariables.get('eventId'), sectorId = pm.environment.get('f5SectorId');",
+                      "  const tokens = [];",
+                      "  for (let u = 0; u < 20; u++) {",
+                      "    const email = 'f5-' + Date.now() + '-' + u + '@exemplo.com';",
+                      "    await retry('/auth/register', { email, password: pass, name: 'F5 ' + u });",
+                      "    const l = await retry('/auth/login', { email, password: pass });",
+                      "    tokens.push(l.json().accessToken);",
+                      "  }",
+                      "  const t0 = Date.now();",
+                      "  const ids = [];",
+                      "  await Promise.all(tokens.flatMap(tk => Array.from({ length: 5 }, async () => {",
+                      "    const r = await retry('/orders', { eventId, sectorId, quantity: 1 }, { Authorization: 'Bearer ' + tk, 'Idempotency-Key': pm.variables.replaceIn('{{$guid}}') });",
+                      "    if (r && r.code === 202) ids.push({ id: r.json().orderId, tk });",
+                      "  })));",
+                      "  pm.test('100 pedidos aceitos (202) em ' + (Date.now() - t0) + ' ms', () => pm.expect(ids.length).to.eql(100));",
+                      "  pm.collectionVariables.set('f5Orders', JSON.stringify(ids));",
+                      "})().catch(err => pm.test('script sem erro', () => { throw err; }));"
                     ]
                   }
                 }
               ]
             },
             {
-              "name": "⏳ 2) Contar resultados",
+              "name": "2) Contar resultados",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3503,7 +3581,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nPode levar até 60 s.",
+                "description": "Pode levar até 60 s.",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3514,17 +3592,19 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
+                      "(async () => {",
                       "",
-                      "const base = pm.environment.get('baseUrl');",
-                      "const ids = JSON.parse(pm.collectionVariables.get('f5Orders') || '[]');",
-                      "const get = ({ id, tk }) => new Promise(res => pm.sendRequest({ url: base + '/orders/' + id, header: { Authorization: 'Bearer ' + tk } }, (e, r) => res(r.json())));",
-                      "let rs = [];",
-                      "for (let i = 0; i < 60; i++) { rs = await Promise.all(ids.map(get)); if (rs.every(o => ['CONFIRMED', 'CANCELLED'].includes(o.status))) break; await new Promise(s => setTimeout(s, 1000)); }",
-                      "const ok = rs.filter(o => o.status === 'CONFIRMED').length;",
-                      "const oos = rs.filter(o => o.status === 'CANCELLED' && o.cancelReason === 'OUT_OF_STOCK').length;",
-                      "console.log({ confirmed: ok, outOfStock: oos });",
-                      "pm.test('exatamente 10 CONFIRMED (R2: zero venda dupla)', () => pm.expect(ok).to.eql(10));",
-                      "pm.test('90 CANCELLED(OUT_OF_STOCK)', () => pm.expect(oos).to.eql(90));"
+                      "  const base = pm.environment.get('baseUrl');",
+                      "  const ids = JSON.parse(pm.collectionVariables.get('f5Orders') || '[]');",
+                      "  const get = ({ id, tk }) => new Promise(res => pm.sendRequest({ url: base + '/orders/' + id, header: { Authorization: 'Bearer ' + tk } }, (e, r) => res(r.json())));",
+                      "  let rs = [];",
+                      "  for (let i = 0; i < 60; i++) { rs = await Promise.all(ids.map(get)); if (rs.every(o => ['CONFIRMED', 'CANCELLED'].includes(o.status))) break; await new Promise(s => setTimeout(s, 1000)); }",
+                      "  const ok = rs.filter(o => o.status === 'CONFIRMED').length;",
+                      "  const oos = rs.filter(o => o.status === 'CANCELLED' && o.cancelReason === 'OUT_OF_STOCK').length;",
+                      "  console.log({ confirmed: ok, outOfStock: oos });",
+                      "  pm.test('exatamente 10 CONFIRMED (R2: zero venda dupla)', () => pm.expect(ok).to.eql(10));",
+                      "  pm.test('90 CANCELLED(OUT_OF_STOCK)', () => pm.expect(oos).to.eql(90));",
+                      "})().catch(err => pm.test('script sem erro', () => { throw err; }));"
                     ]
                   }
                 }
@@ -3537,7 +3617,7 @@
           "name": "F6 · Broker fora do ar (30 s)",
           "item": [
             {
-              "name": "⏳ 1) Pausar o MiniStack",
+              "name": "1) Pausar o MiniStack",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3551,7 +3631,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker pause $(docker compose ps -q ministack)\n```",
+                "description": "```bash\ndocker pause $(docker compose ps -q ministack)\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3569,7 +3649,7 @@
               ]
             },
             {
-              "name": "⏳ 2) Criar pedido com o broker fora (continua 202)",
+              "name": "2) Criar pedido com o broker fora (continua 202)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -3595,7 +3675,7 @@
                   "mode": "raw",
                   "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"sectorId\": \"{{sectorId}}\",\n  \"quantity\": 2\n}"
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nO pedido nasce `PENDING` e o evento fica na `outbox`.",
+                "description": "O pedido nasce `PENDING` e o evento fica na `outbox`.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -3623,7 +3703,7 @@
               ]
             },
             {
-              "name": "⏳ 3) Pedido ainda PENDING",
+              "name": "3) Pedido ainda PENDING",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3647,7 +3727,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -3663,7 +3743,7 @@
               ]
             },
             {
-              "name": "⏳ 4) Esperar 30 s e despausar",
+              "name": "4) Esperar 30 s e despausar",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3677,7 +3757,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nsleep 30 && docker unpause $(docker compose ps -q ministack)\n```",
+                "description": "```bash\nsleep 30 && docker unpause $(docker compose ps -q ministack)\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3695,7 +3775,7 @@
               ]
             },
             {
-              "name": "⏳ 5) Saga completa sozinha",
+              "name": "5) Saga completa sozinha",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3709,7 +3789,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nRepete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
+                "description": "Repete sozinho (até 30 s) até CONFIRMED ou CANCELLED. Rode no Collection Runner ou clique Send de novo até ficar final.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -3753,7 +3833,7 @@
           "name": "F7 · Resposta tardia (latência > timeout)",
           "item": [
             {
-              "name": "⏳ 1) Latência 20 s (> ORDER_PAYMENT_TIMEOUT_MS=15000)",
+              "name": "1) Latência 20 s (> ORDER_PAYMENT_TIMEOUT_MS=15000)",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3767,7 +3847,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nPAYMENT_LATENCY_MS=20000 PAYMENT_PROVIDER_TIMEOUT_MS=30000 PAYMENT_WORKER_LEASE_MS=40000 PAYMENT_FAILURE_RATE=0 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```\n\nO lease precisa ser maior que o timeout (`PAYMENT_WORKER_LEASE_MS > PAYMENT_PROVIDER_TIMEOUT_MS`), senão o payment não sobe.",
+                "description": "```bash\nPAYMENT_LATENCY_MS=20000 PAYMENT_PROVIDER_TIMEOUT_MS=30000 PAYMENT_WORKER_LEASE_MS=40000 PAYMENT_FAILURE_RATE=0 docker compose up -d --no-deps payment-service && scripts/wait-healthy.sh 120\n```\n\nO lease precisa ser maior que o timeout (`PAYMENT_WORKER_LEASE_MS > PAYMENT_PROVIDER_TIMEOUT_MS`), senão o payment não sobe.",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3785,7 +3865,7 @@
               ]
             },
             {
-              "name": "⏳ 2) Criar pedido",
+              "name": "2) Criar pedido",
               "request": {
                 "method": "POST",
                 "header": [
@@ -3821,7 +3901,7 @@
                     }
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -3839,7 +3919,7 @@
               ]
             },
             {
-              "name": "⏳ 3) Pedido → CANCELLED(PAYMENT_TIMEOUT)",
+              "name": "3) Pedido → CANCELLED(PAYMENT_TIMEOUT)",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3853,7 +3933,7 @@
                     "{{orderId}}"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\nLeva ~15 s. O estado não muda quando a aprovação tardia chega: vira `RefundRequested` → `PaymentRefunded`.",
+                "description": "Leva ~15 s. O estado não muda quando a aprovação tardia chega: vira `RefundRequested` → `PaymentRefunded`.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [
@@ -3891,7 +3971,7 @@
               ]
             },
             {
-              "name": "⏳ 4) Conferir o reembolso (~10 s depois)",
+              "name": "4) Conferir o reembolso (~10 s depois)",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3905,7 +3985,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker compose exec -T payments-db psql -U payments_owner -d payments -tAc \"SELECT status FROM payments WHERE order_id='<orderId>'\"   # REFUNDED\ndocker compose up -d --no-deps payment-service\n```",
+                "description": "```bash\ndocker compose exec -T payments-db psql -U payments_owner -d payments -tAc \"SELECT status FROM payments WHERE order_id='<orderId>'\"   # REFUNDED\ndocker compose up -d --no-deps payment-service\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3929,7 +4009,7 @@
           "name": "F8 · Escala horizontal (3 réplicas)",
           "item": [
             {
-              "name": "⏳ 1) Subir 3 réplicas do payment",
+              "name": "1) Subir 3 réplicas do payment",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3943,7 +4023,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\ndocker compose up -d --no-deps --scale payment-service=3 payment-service\n```",
+                "description": "```bash\ndocker compose up -d --no-deps --scale payment-service=3 payment-service\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3961,7 +4041,7 @@
               ]
             },
             {
-              "name": "⏳ 2) 12 pedidos em rajada",
+              "name": "2) 12 pedidos em rajada",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -3975,7 +4055,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n`ORDERS_RPS=2` limita por usuário: o script espera o 429. Para rajada real use `scripts/f8-scale.sh`.",
+                "description": "`ORDERS_RPS=2` limita por usuário: o script espera o 429. Para rajada real use `scripts/f8-scale.sh`.",
                 "auth": {
                   "type": "noauth"
                 }
@@ -3986,25 +4066,27 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
+                      "(async () => {",
                       "",
-                      "const base = pm.environment.get('baseUrl');",
-                      "const tk = pm.collectionVariables.get('userToken');",
-                      "const ids = [];",
-                      "for (let i = 0; i < 12; i++) {",
-                      "  const r = await new Promise(res => pm.sendRequest({ url: base + '/orders', method: 'POST', header: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk, 'Idempotency-Key': pm.variables.replaceIn('{{$guid}}') },",
-                      "    body: { mode: 'raw', raw: JSON.stringify({ eventId: pm.collectionVariables.get('eventId'), sectorId: pm.collectionVariables.get('sectorId'), quantity: 1 }) } }, (e, r) => res(r)));",
-                      "  if (r.code === 429) { await new Promise(s => setTimeout(s, 1000)); i--; continue; }",
-                      "  if (r.code === 202) ids.push(r.json().orderId);",
-                      "}",
-                      "pm.collectionVariables.set('f8Orders', JSON.stringify(ids));",
-                      "pm.test('12 pedidos aceitos', () => pm.expect(ids.length).to.eql(12));"
+                      "  const base = pm.environment.get('baseUrl');",
+                      "  const tk = pm.collectionVariables.get('userToken');",
+                      "  const ids = [];",
+                      "  for (let i = 0; i < 12; i++) {",
+                      "    const r = await new Promise(res => pm.sendRequest({ url: base + '/orders', method: 'POST', header: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk, 'Idempotency-Key': pm.variables.replaceIn('{{$guid}}') },",
+                      "      body: { mode: 'raw', raw: JSON.stringify({ eventId: pm.collectionVariables.get('eventId'), sectorId: pm.collectionVariables.get('sectorId'), quantity: 1 }) } }, (e, r) => res(r)));",
+                      "    if (r.code === 429) { await new Promise(s => setTimeout(s, 1000)); i--; continue; }",
+                      "    if (r.code === 202) ids.push(r.json().orderId);",
+                      "  }",
+                      "  pm.collectionVariables.set('f8Orders', JSON.stringify(ids));",
+                      "  pm.test('12 pedidos aceitos', () => pm.expect(ids.length).to.eql(12));",
+                      "})().catch(err => pm.test('script sem erro', () => { throw err; }));"
                     ]
                   }
                 }
               ]
             },
             {
-              "name": "⏳ 3) Todos chegam a estado final",
+              "name": "3) Todos chegam a estado final",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -4021,7 +4103,7 @@
                 "auth": {
                   "type": "noauth"
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n"
+                "description": ""
               },
               "event": [
                 {
@@ -4029,20 +4111,22 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
+                      "(async () => {",
                       "",
-                      "const base = pm.environment.get('baseUrl'), tk = pm.collectionVariables.get('userToken');",
-                      "const ids = JSON.parse(pm.collectionVariables.get('f8Orders') || '[]');",
-                      "const get = (id) => new Promise(res => pm.sendRequest({ url: base + '/orders/' + id, header: { Authorization: 'Bearer ' + tk } }, (e, r) => res(r.json())));",
-                      "let rs = [];",
-                      "for (let i = 0; i < 60; i++) { rs = await Promise.all(ids.map(get)); if (rs.every(o => ['CONFIRMED', 'CANCELLED'].includes(o.status))) break; await new Promise(s => setTimeout(s, 1000)); }",
-                      "pm.test('todos finais', () => pm.expect(rs.every(o => ['CONFIRMED', 'CANCELLED'].includes(o.status))).to.be.true);"
+                      "  const base = pm.environment.get('baseUrl'), tk = pm.collectionVariables.get('userToken');",
+                      "  const ids = JSON.parse(pm.collectionVariables.get('f8Orders') || '[]');",
+                      "  const get = (id) => new Promise(res => pm.sendRequest({ url: base + '/orders/' + id, header: { Authorization: 'Bearer ' + tk } }, (e, r) => res(r.json())));",
+                      "  let rs = [];",
+                      "  for (let i = 0; i < 60; i++) { rs = await Promise.all(ids.map(get)); if (rs.every(o => ['CONFIRMED', 'CANCELLED'].includes(o.status))) break; await new Promise(s => setTimeout(s, 1000)); }",
+                      "  pm.test('todos finais', () => pm.expect(rs.every(o => ['CONFIRMED', 'CANCELLED'].includes(o.status))).to.be.true);",
+                      "})().catch(err => pm.test('script sem erro', () => { throw err; }));"
                     ]
                   }
                 }
               ]
             },
             {
-              "name": "⏳ 4) Conferir distribuição e unicidade",
+              "name": "4) Conferir distribuição e unicidade",
               "request": {
                 "method": "GET",
                 "header": [],
@@ -4056,7 +4140,7 @@
                     "live"
                   ]
                 },
-                "description": "⏳ **Pendente**: depende do inventory-service, que ainda não tem código (o cenário precisa da reserva de estoque). Order e payment já respondem.\n\n```bash\nscripts/check-replicas.sh\ndocker compose up -d --no-deps --scale payment-service=2 payment-service\n```",
+                "description": "```bash\nscripts/check-replicas.sh\ndocker compose up -d --no-deps --scale payment-service=2 payment-service\n```",
                 "auth": {
                   "type": "noauth"
                 }
@@ -4182,7 +4266,7 @@
           ]
         },
         {
-          "name": "⏳ Versionamento de eventos (v1 + v2 convivendo)",
+          "name": "Versionamento de eventos (v1 + v2 convivendo)",
           "request": {
             "method": "GET",
             "header": [],
@@ -4196,7 +4280,7 @@
                 "live"
               ]
             },
-            "description": "⏳ **Pendente**: depende do upcaster `OrderCreated` v1→v2 do inventory-service, que ainda não tem código.\n\n```bash\nscripts/demo-versioning.sh\n```",
+            "description": "```bash\nscripts/demo-versioning.sh\n```",
             "auth": {
               "type": "noauth"
             }
@@ -4284,7 +4368,7 @@
           ]
         },
         {
-          "name": "⏳ Gateway: revogação e rate limit",
+          "name": "Gateway: revogação e rate limit",
           "request": {
             "method": "GET",
             "header": [],
@@ -4298,7 +4382,7 @@
                 "live"
               ]
             },
-            "description": "⏳ **Pendente**: depende do auth-service, que ainda não tem código (o script cadastra e loga um usuário).\n\nToken revogado por `TokenRevoked` recebe 401; logins repetidos recebem 429 + `Retry-After`.\n\n```bash\nscripts/gateway-check.sh\n```\n\nEsperado: `gateway-check: 0 failed`.",
+            "description": "Token revogado por `TokenRevoked` recebe 401; logins repetidos recebem 429 + `Retry-After`.\n\n```bash\nscripts/gateway-check.sh\n```\n\nEsperado: `gateway-check: 0 failed`.",
             "auth": {
               "type": "noauth"
             }
