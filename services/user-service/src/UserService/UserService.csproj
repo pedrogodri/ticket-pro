@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Web SDK: Kestrel for /me* and the health probes, and Microsoft.Extensions.Logging.Console for the
+       vendored StandardJsonConsoleFormatter. Package versions match shared/dotnet/src/TicketPro.Platform.csproj. -->
+  <PropertyGroup>
+    <RootNamespace>UserService</RootNamespace>
+    <AssemblyName>UserService</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="4.0.100.22" />
+    <PackageReference Include="AWSSDK.SQS" Version="4.0.100.21" />
+    <PackageReference Include="JsonSchema.Net" Version="9.5.0" />
+    <PackageReference Include="Npgsql" Version="10.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="UserService.Tests" />
+  </ItemGroup>
+</Project>
