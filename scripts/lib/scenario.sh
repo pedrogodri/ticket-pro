@@ -13,15 +13,25 @@ finish() { echo "${SCENARIO:-scenario}: $failures failed"; [ "$failures" -eq 0 ]
 id() { uuidgen | tr '[:upper:]' '[:lower:]'; }
 now_iso() { date -u +%Y-%m-%dT%H:%M:%S.000Z; }
 
+# db_host DB → the compose service that runs that database.
+db_host() {
+  case "$1" in
+    orders) echo orders-db ;; inventory) echo inventory-db ;; payments) echo payments-db ;;
+    notifications) echo notifications-db ;; users) echo users-db ;; auth) echo auth-db ;;
+    *) echo "unknown database $1" >&2; return 1 ;;
+  esac
+}
+
 # sql DB QUERY → rows (|-separated, no header). DB is the service database name: orders, inventory...
 sql() {
-  local db="$1" host
-  case "$db" in
-    orders) host=orders-db ;; inventory) host=inventory-db ;; payments) host=payments-db ;;
-    notifications) host=notifications-db ;; users) host=users-db ;; auth) host=auth-db ;;
-    *) echo "unknown database $db" >&2; return 1 ;;
-  esac
-  docker compose exec -T "$host" psql -U "${db}_owner" -d "$db" -tAc "$2"
+  local host; host="$(db_host "$1")" || return 1
+  docker compose exec -T "$host" psql -U "${1}_owner" -d "$1" -tAc "$2"
+}
+
+# table DB QUERY → the rows as a psql table with header, for showing on screen.
+table() {
+  local host; host="$(db_host "$1")" || return 1
+  docker compose exec -T "$host" psql -U "${1}_owner" -d "$1" -P pager=off -P footer=off -c "$2"
 }
 
 # http METHOD PATH [BODY] [TOKEN] [extra curl args...] → STATUS, BODY. Retries 429 honouring Retry-After
