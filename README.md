@@ -115,7 +115,7 @@ Com a stack no ar, o caminho feliz completo:
 scripts/happy-path.sh   # cadastro → login → pedido → CONFIRMED → ingressos → comprovante no S3
 ```
 
-O roteiro da apresentação está em [`docs/runbook.md`](docs/runbook.md): o caminho feliz, os cenários de falha F1–F8 e os bônus, com comando, o que observar e o resultado esperado de cada um. Os 8 cenários de uma vez:
+Como rodar pelos scripts ou pela collection Postman: [`docs/como-rodar.md`](docs/como-rodar.md). O roteiro da apresentação está em [`docs/runbook.md`](docs/runbook.md): o caminho feliz, os cenários de falha F1–F8 e os bônus, com comando, o que observar e o resultado esperado de cada um. Os 8 cenários de uma vez:
 
 ```bash
 for f in scripts/f[1-8]-*.sh; do $f | tail -1; done
