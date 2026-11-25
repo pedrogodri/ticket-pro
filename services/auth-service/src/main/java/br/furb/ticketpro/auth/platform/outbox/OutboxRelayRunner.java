@@ -1,5 +1,7 @@
 package br.furb.ticketpro.auth.platform.outbox;
 
+import br.furb.ticketpro.auth.platform.tracing.Spans;
+import io.opentelemetry.context.Scope;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.context.SmartLifecycle;
 
@@ -17,7 +19,15 @@ public final class OutboxRelayRunner implements SmartLifecycle {
   @Override
   public void start() {
     stop.set(false);
-    thread = Thread.ofVirtual().name("outbox-relay").start(() -> relay.run(stop::get));
+    // Polling is not traced (Spans.unsampled); each publication opens its own producer span.
+    thread =
+        Thread.ofVirtual()
+            .name("outbox-relay")
+            .start(() -> {
+              try (Scope ignored = Spans.unsampled()) {
+                relay.run(stop::get);
+              }
+            });
   }
 
   @Override

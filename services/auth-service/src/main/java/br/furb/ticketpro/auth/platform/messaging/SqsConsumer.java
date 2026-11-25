@@ -8,9 +8,10 @@ import br.furb.ticketpro.auth.platform.envelope.StaleEventException;
 import br.furb.ticketpro.auth.platform.envelope.UnsupportedVersionException;
 import br.furb.ticketpro.auth.platform.idempotency.ProcessedMessages;
 import br.furb.ticketpro.auth.platform.retry.Backoff;
-import br.furb.ticketpro.auth.platform.tracing.TraceContext;
+import br.furb.ticketpro.auth.platform.tracing.Spans;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.context.Scope;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -139,22 +140,39 @@ public final class SqsConsumer {
     MDC.put("messageId", envelope.messageId());
     MDC.put("type", envelope.type());
     MDC.put("version", Integer.toString(envelope.version()));
-    SpanContext parent =
-        Span.fromContext(TraceContext.extract(traceparentOf(message))).getSpanContext();
-    if (parent.isValid()) {
-      MDC.put("traceId", parent.getTraceId());
-      MDC.put("spanId", parent.getSpanId());
+    // ADR-0012: a consumer span in the producer's trace, linked to the producer span.
+    Span span =
+        Spans.consumer(
+            traceparentOf(message),
+            envelope.type(),
+            props.queueUrl(),
+            envelope.messageId(),
+            props.name());
+    SpanContext current = span.getSpanContext();
+    if (current.isValid()) {
+      MDC.put("traceId", current.getTraceId());
+      MDC.put("spanId", current.getSpanId());
     }
-    try (Scope ignored = TraceContext.extract(traceparentOf(message)).makeCurrent()) {
+    ConsumeOutcome outcome = null;
+    try (Scope ignored = span.makeCurrent()) {
       MessageHandler handler = handlers.get(envelope.type());
       if (handler == null || !handler.versions().contains(envelope.version())) {
-        return poison(
-            message,
-            new UnsupportedVersionException(
-                "no handler for " + envelope.type() + " v" + envelope.version()));
+        outcome =
+            poison(
+                message,
+                new UnsupportedVersionException(
+                    "no handler for " + envelope.type() + " v" + envelope.version()));
+      } else {
+        outcome = apply(message, envelope, handler);
       }
-      return apply(message, envelope, handler);
+      return outcome;
     } finally {
+      if (outcome == null
+          || outcome == ConsumeOutcome.POISON
+          || outcome == ConsumeOutcome.TRANSIENT) {
+        span.setStatus(StatusCode.ERROR, outcome == null ? "failed" : outcome.name());
+      }
+      span.end();
       MDC.clear();
     }
   }

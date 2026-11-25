@@ -2,6 +2,11 @@ package br.furb.ticketpro.auth.platform.outbox;
 
 import br.furb.ticketpro.auth.platform.envelope.Envelope;
 import br.furb.ticketpro.auth.platform.retry.Backoff;
+import br.furb.ticketpro.auth.platform.tracing.Spans;
+import br.furb.ticketpro.auth.platform.tracing.TraceContext;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.context.Scope;
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -10,7 +15,6 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
@@ -64,7 +68,7 @@ public final class OutboxRelay {
       }
       Row row = rows.get(i);
       try {
-        publisher.publish(row.topicArn(), row.envelope(), Optional.ofNullable(row.traceparent()));
+        publish(row);
       } catch (RuntimeException e) {
         setBroker(false, e);
         reschedule(row, e);
@@ -89,6 +93,24 @@ public final class OutboxRelay {
           .log("message_published");
     }
     return published;
+  }
+
+  /**
+   * Publishes one row inside a producer span that continues the trace stored with the row, and
+   * propagates that span as the message traceparent (ADR-0012, same as shared/go).
+   */
+  private void publish(Row row) {
+    Envelope env = row.envelope();
+    Span span = Spans.producer(row.traceparent(), env.type(), row.topicArn(), env.messageId());
+    try (Scope ignored = span.makeCurrent()) {
+      publisher.publish(row.topicArn(), env, TraceContext.inject());
+    } catch (RuntimeException e) {
+      span.recordException(e);
+      span.setStatus(StatusCode.ERROR, e.getMessage());
+      throw e;
+    } finally {
+      span.end();
+    }
   }
 
   /** Publishes until {@code stop} is true: pollInterval between batches, backoff after failures. */

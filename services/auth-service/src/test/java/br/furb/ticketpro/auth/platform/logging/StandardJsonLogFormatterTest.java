@@ -79,8 +79,17 @@ class StandardJsonLogFormatterTest {
     assertThat(line)
         .containsEntry("message", "message_published")
         .containsEntry("messageId", "m-1")
-        .containsEntry("version", "2")
         .doesNotContainKey("fields");
+    assertThat(json).contains("\"version\":2");
+  }
+
+  /** p18: booleans stay JSON booleans, as scripts/f3-duplicate.sh greps for. */
+  @Test
+  void p18BooleanKeyValuesAreTyped() {
+    LoggingEvent event =
+        new LoggingEvent(Logger.FQCN, logger, Level.INFO, "message_consumed", null, null);
+    event.addKeyValuePair(new org.slf4j.event.KeyValuePair("duplicate", true));
+    assertThat(formatter.format(event)).contains("\"duplicate\":true");
   }
 
   @Test

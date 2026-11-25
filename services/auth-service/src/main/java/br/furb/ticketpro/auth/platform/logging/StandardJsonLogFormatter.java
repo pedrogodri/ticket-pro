@@ -45,14 +45,14 @@ public class StandardJsonLogFormatter implements StructuredLogFormatter<ILogging
                     members.add(key, event -> event.getMDCPropertyMap().get(key)).whenNotNull();
                   }
                   // SLF4J key-values (log.atInfo().addKeyValue(...)) become flat fields, so the
-                  // message
-                  // stays stable (padroes §5).
+                  // message stays stable (padroes §5). Booleans and numbers keep their JSON type
+                  // ("duplicate":true, which scripts/f3-duplicate.sh greps for, RFC 0004 §5.6).
                   members
                       .from(ILoggingEvent::getKeyValuePairs)
                       .whenNotNull()
                       .whenNot(List::isEmpty)
                       .usingPairs((pairs, pair) ->
-                          pairs.forEach(kv -> pair.accept(kv.key, String.valueOf(kv.value))));
+                          pairs.forEach(kv -> pair.accept(kv.key, typed(kv.value))));
                   members
                       .add("error", ILoggingEvent::getThrowableProxy)
                       .whenNotNull()
@@ -67,6 +67,10 @@ public class StandardJsonLogFormatter implements StructuredLogFormatter<ILogging
   @Override
   public String format(ILoggingEvent event) {
     return writer.writeToString(event);
+  }
+
+  private static Object typed(Object value) {
+    return value instanceof Boolean || value instanceof Number ? value : String.valueOf(value);
   }
 
   private static String standardLevel(Level level) {
