@@ -2,6 +2,9 @@ package br.furb.ticketpro.inventory.platform.config;
 
 import br.furb.ticketpro.inventory.modules.catalog.application.CatalogQueries;
 import br.furb.ticketpro.inventory.modules.catalog.infrastructure.CatalogRepository;
+import br.furb.ticketpro.inventory.modules.reservations.application.InventoryEvents;
+import br.furb.ticketpro.inventory.modules.reservations.application.InventoryHandlers;
+import br.furb.ticketpro.inventory.modules.reservations.infrastructure.ReservationRepository;
 import br.furb.ticketpro.inventory.platform.envelope.ContractValidator;
 import br.furb.ticketpro.inventory.platform.health.BrokerProbe;
 import br.furb.ticketpro.inventory.platform.health.DatabaseProbe;
@@ -132,9 +135,28 @@ public class AppConfigConfiguration {
   }
 
   @Bean
+  public ReservationRepository reservationRepository() {
+    return new ReservationRepository();
+  }
+
+  @Bean
+  public InventoryEvents inventoryEvents(AppConfig config) {
+    return new InventoryEvents(config.topicArn());
+  }
+
+  @Bean
+  public InventoryHandlers inventoryHandlers(
+      ReservationRepository repository, InventoryEvents events, AppConfig config) {
+    return new InventoryHandlers(repository, events, config.reservations().ttl());
+  }
+
+  @Bean
   public SqsConsumer sqsConsumer(
-      SqsClient sqs, @Qualifier("worker") DataSource workerDataSource, AppConfig config) {
-    Map<String, MessageHandler> handlers = Map.of();
+      SqsClient sqs,
+      @Qualifier("worker") DataSource workerDataSource,
+      AppConfig config,
+      InventoryHandlers inventoryHandlers) {
+    Map<String, MessageHandler> handlers = inventoryHandlers.all();
     return new SqsConsumer(
         sqs,
         workerDataSource,
