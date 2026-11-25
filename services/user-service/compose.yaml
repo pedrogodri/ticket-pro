@@ -3,7 +3,15 @@
 services:
   user-service:
     build: .
+    # R4: two replicas compete for the same queue (ticketpro-user-service); processed_messages and the
+    # read models' natural keys keep the effect single, and the projections do not depend on arrival order.
+    deploy:
+      replicas: 2
     env_file: .env.example
+    # The registration-compensation demo can change the blocked domains from the shell; standalone keeps
+    # the .env.example value.
+    environment:
+      PROFILE_BLOCKED_EMAIL_DOMAINS: ${PROFILE_BLOCKED_EMAIL_DOMAINS:-bloqueado.test}
     networks: [backend, user-service-data]
     depends_on:
       user-service-migrate:
