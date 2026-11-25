@@ -6,6 +6,7 @@ import br.furb.ticketpro.auth.modules.keys.SigningKeys;
 import br.furb.ticketpro.auth.modules.registration.PasswordHasher;
 import br.furb.ticketpro.auth.modules.registration.RegistrationService;
 import br.furb.ticketpro.auth.modules.session.LoginService;
+import br.furb.ticketpro.auth.modules.session.RefreshService;
 import br.furb.ticketpro.auth.platform.health.BrokerProbe;
 import br.furb.ticketpro.auth.platform.health.DatabaseProbe;
 import br.furb.ticketpro.auth.platform.messaging.AwsClients;
@@ -144,6 +145,13 @@ public class AppConfigConfiguration {
       AppConfig config) {
     return new LoginService(
         worker, hasher, issuer, config.jwt().refreshTtlSeconds(), Clock.systemUTC());
+  }
+
+  @Bean
+  public RefreshService refreshService(
+      @Qualifier("worker") DataSource worker, JwtIssuer issuer, AppConfig config) {
+    return new RefreshService(
+        worker, issuer, config.jwt().refreshTtlSeconds(), Clock.systemUTC(), config.topicArn());
   }
 
   @Bean

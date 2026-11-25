@@ -69,6 +69,8 @@ public class LoginService {
       if (userId == null || !ok) {
         throw new InvalidCredentialsException();
       }
+      c.setAutoCommit(false);
+      UUID familyId = UUID.randomUUID();
       IssuedToken access = issuer.issue(userId.toString(), storedEmail);
       String refresh = newRefreshToken();
       try (PreparedStatement ps =
@@ -76,19 +78,36 @@ public class LoginService {
               "INSERT INTO refresh_tokens (id, user_id, family_id, token_hash, expires_at) VALUES (?, ?, ?, ?, ?)")) {
         ps.setObject(1, UUID.randomUUID());
         ps.setObject(2, userId);
-        ps.setObject(3, UUID.randomUUID());
+        ps.setObject(3, familyId);
         ps.setString(4, sha256(refresh));
         ps.setTimestamp(5, Timestamp.from(clock.instant().plusSeconds(refreshTtlSeconds)));
         ps.executeUpdate();
       }
+      recordIssued(c, access, userId, familyId, clock);
+      c.commit();
       return new LoginResult(access.value(), refresh, access.expiresIn());
     } catch (SQLException e) {
       throw new IllegalStateException("login failed", e);
     }
   }
 
+  /** Registers the access token's jti so it can be revoked later (RFC 0007 §5.4). */
+  static void recordIssued(
+      Connection c, IssuedToken access, UUID userId, UUID familyId, Clock clock)
+      throws SQLException {
+    try (PreparedStatement ps =
+        c.prepareStatement(
+            "INSERT INTO issued_access_tokens (jti, user_id, family_id, expires_at) VALUES (?, ?, ?, ?)")) {
+      ps.setObject(1, UUID.fromString(access.jti()));
+      ps.setObject(2, userId);
+      ps.setObject(3, familyId);
+      ps.setTimestamp(4, Timestamp.from(clock.instant().plusSeconds(access.expiresIn())));
+      ps.executeUpdate();
+    }
+  }
+
   /** 256 random bits, base64url (RFC 0002 §5.3). */
-  private static String newRefreshToken() {
+  static String newRefreshToken() {
     byte[] bytes = new byte[32];
     RANDOM.nextBytes(bytes);
     return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
