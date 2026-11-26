@@ -9,6 +9,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/aws.sh
 load_env
+. scripts/lib/trace.sh
 
 MESSAGES="${1:-40}"
 MIN="${AUTOSCALER_MIN_REPLICAS:-2}"
@@ -27,6 +28,7 @@ depth() { awsl sqs get-queue-attributes --queue-url "$QUEUE" --attribute-names A
 wait_for() { local s=$1; shift; for _ in $(seq 1 "$s"); do "$@" && return 0; sleep 1; done; return 1; }
 
 ORIGINAL=$(docker compose ps -q payment-service)
+trace "docker pause nas réplicas do compose (para a fila acumular)"
 docker pause $ORIGINAL >/dev/null
 trap 'docker unpause $ORIGINAL >/dev/null 2>&1' EXIT
 echo "info  paused the compose payment replicas; replicas=$(replicas)"
@@ -39,25 +41,32 @@ while [ "$sent" -lt "$MESSAGES" ]; do
       '{Id:$i, Message:({messageId:$m, correlationId:$c, type:"PaymentRequested", version:1, occurredAt:$t, payload:$p}|tostring),
         MessageAttributes:{type:{DataType:"String",StringValue:"PaymentRequested"}, version:{DataType:"String",StringValue:"1"}}}'
   done | jq -cs .)
+  trace "SNS publish-batch → ticketpro-orders: 10 PaymentRequested ($((sent + 10)) de $MESSAGES)"
   awsl sns publish-batch --topic-arn "$TOPIC" --publish-batch-request-entries "$entries" >/dev/null || { fail "publish failed"; exit 1; }
   sent=$((sent + 10))
 done
 pass "published $sent PaymentRequested; queue depth $(depth)"
+banner info "FILA ACUMULOU: $(depth) mensagens no payment" "réplicas do compose congeladas; o autoscaler olha a profundidade da fila"
+trace_replicas payment-service
 
 # The autoscaler may react while the batches are still being published, so it can peak below MAX:
 # what matters is that it scales above MIN with the backlog and never beyond MAX.
 peak=0
-track() { local n; n=$(replicas); [ "$n" -gt "$peak" ] && peak=$n; return 0; }
+track() { local n; n=$(replicas); [ "$n" -gt "$peak" ] && peak=$n; trace_once "réplicas do payment: $n"; return 0; }
 above_min() { track; [ "$(replicas)" -gt "$MIN" ]; }
-wait_for 60 above_min && pass "autoscaler scaled payment-service above $MIN replicas" || fail "replicas stayed at $(replicas)"
+wait_for 60 above_min && banner info "AUTOSCALER ESCALOU: payment-service com $(replicas) réplicas" "limite: AUTOSCALER_MAX_REPLICAS=$MAX" && trace_replicas payment-service
+above_min && pass "autoscaler scaled payment-service above $MIN replicas" || fail "replicas stayed at $(replicas)"
 
 drained() { track; [ "$(depth)" -eq 0 ]; }
-wait_for 90 drained && pass "the new replicas drained the queue (peak: $peak replicas)" || fail "queue depth still $(depth)"
+wait_for 90 drained && banner ok "FILA DRENOU: profundidade $(depth), pico de $peak réplicas"
+[ "$(depth)" -eq 0 ] && pass "the new replicas drained the queue (peak: $peak replicas)" || fail "queue depth still $(depth)"
 [ "$peak" -le "$MAX" ] && pass "never above AUTOSCALER_MAX_REPLICAS=$MAX" || fail "peak $peak above $MAX"
 
+trace "docker unpause nas réplicas do compose; esperando o cooldown do autoscaler"
 docker unpause $ORIGINAL >/dev/null; trap - EXIT
-at_min() { [ "$(replicas)" -le "$MIN" ]; }
-wait_for 120 at_min && pass "after the cooldown it scaled back to $(replicas) replicas" || fail "replicas stayed at $(replicas) (want $MIN)"
+at_min() { local n; n=$(replicas); trace_once "réplicas do payment: $n"; [ "$n" -le "$MIN" ]; }
+wait_for 120 at_min && banner ok "VOLTOU A $(replicas) RÉPLICAS depois do cooldown" && trace_replicas payment-service
+at_min && pass "after the cooldown it scaled back to $(replicas) replicas" || fail "replicas stayed at $(replicas) (want $MIN)"
 
 docker compose logs autoscaler --since 5m 2>/dev/null | grep -o '"depth":[0-9]*,"current":[0-9]*,"desired":[0-9]*' | uniq | sed 's/^/info  /' | tail -8
 echo "demo-autoscale: $failures failed"

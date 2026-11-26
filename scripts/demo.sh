@@ -10,6 +10,10 @@
 #                                                    (default: the latest order)
 #   scripts/demo.sh surprise SERVICE [SECONDS=10]    surprise failure on SERVICE (e.g. inventory-service)
 #   scripts/demo.sh all                              rehearsal: everything in sequence, one line each
+#   scripts/demo.sh collection [PREFIX]              Postman collection through Newman: browse folders and
+#                                                    requests, or run the top folder starting with PREFIX (03)
+#   scripts/demo.sh logs                             live event flow: one short line per message published,
+#                                                    consumed, duplicated, rejected, broker drop, scaling
 # With a terminal on stdin it waits for Enter between the prediction and the run (DEMO_NO_PAUSE=1 skips).
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -52,8 +56,161 @@ logs_for() {
     | sort | sed 's/  *$//'
 }
 
+# --- Postman collection (docs/postman) through Newman -------------------------------------------------
+COLLECTION=docs/postman/ticket-pro.postman_collection.json
+COLLECTION_ENV=docs/postman/ticket-pro.local.postman_environment.json
+
+# newman_cmd → how to call Newman here (global install or the npx cache), or fails with the install hint
+newman_cmd() {
+  if command -v newman >/dev/null; then echo newman
+  elif npx --no-install newman --version >/dev/null 2>&1; then echo "npx --no-install newman"
+  else
+    printf '%sNewman não está instalado.%s Instale uma vez (pacote oficial da Postman) e rode de novo:\n  npm install -g newman@6\n' "$R" "$N" >&2
+    return 1
+  fi
+}
+
+# item_path JSON_INDEXES → the jq path to that item, e.g. [3,0] → ["item",3,"item",0]
+# shellcheck disable=SC2016  # $p and $i are jq variables
+COLL_JQ_DEFS='def ipath($p): reduce $p[] as $i ([]; . + ["item", $i]);
+  def pick($p): if ($p | length) == 0 then . else .item = [ .item[$p[0]] | pick($p[1:]) ] end;'
+
+# run_collection INDEXES → runs that folder or request (with "00 · Setup" before it, which creates the
+# users and the token every other request needs) and prints every request, its status and its tests
+# shellcheck disable=SC2016  # $p and $i are jq variables
+run_collection() {
+  local p="$1" nm tmp label rc depth top name f skipped
+  label=$(jq -r --argjson p "$p" "$COLL_JQ_DEFS"' [foreach $p[] as $i (.; .item[$i]; .name)] | join(" / ")' "$COLLECTION")
+  depth=$(jq 'length' <<<"$p")
+  top=$(jq -r --argjson p "$p" 'if ($p | length) > 0 then .item[$p[0]].name[0:2] else "" end' "$COLLECTION")
+  name=$(jq -r --argjson p "$p" "$COLL_JQ_DEFS"' if ($p | length) > 0 then getpath(ipath($p)) | .name else "" end' "$COLLECTION")
+  # 05 (F1–F8) and 07 (per-service checks) need docker to provoke the failure: run the real scenario
+  if [ "$top" = 05 ] && [ "$depth" -le 2 ]; then
+    if [ "$depth" = 1 ]; then for f in f1 f2 f3 f4 f5 f6 f7 f8; do scenario "$f"; done; return; fi
+    f=$(grep -oE '^F[1-8]' <<<"$name" | tr F f)
+    info "$label: a falha de infraestrutura precisa de docker, rodando o cenário real ($f)"
+    scenario "$f"; return
+  fi
+  if [ "$top" = 07 ] && [ "$depth" -le 2 ]; then
+    case "$name" in
+      *Payment*) scenario payment ;; *Notification*) scenario notification ;; *Gateway*) scenario gateway ;;
+      *) scenario payment; scenario notification; scenario gateway ;;
+    esac
+    return
+  fi
+  nm=$(newman_cmd) || return 1
+  tmp=$(mktemp -t ticketpro-collection).json
+  # ⏳ = not implemented yet (auth refresh/logout): dropped from folder runs, kept when picked directly.
+  # The whole collection leaves out 05 and 07, which run as scripts (pick the folder for that).
+  jq --argjson p "$p" "$COLL_JQ_DEFS"'
+    (if ($p | length) == 0 or $p[0] == 0 then pick($p)
+     else .item[0] as $setup | pick($p) | .item = [$setup] + .item end)
+    | if ($p | length) == 0 then .item |= map(select(.name | test("^0[57] ") | not)) else . end' "$COLLECTION" > "$tmp.full"
+  if [[ "$name" == ⏳* ]]; then cp "$tmp.full" "$tmp"
+  else jq 'def drop: if has("item") then .item |= map(select(.name | startswith("⏳") | not) | drop) else . end; drop' "$tmp.full" > "$tmp"; fi
+  skipped=$(( $(jq '[.. | objects | select(has("request"))] | length' "$tmp.full") - $(jq '[.. | objects | select(has("request"))] | length' "$tmp") ))
+  rm -f "$tmp.full"
+  title "Collection: ${label:-inteira}"
+  [ "$skipped" -gt 0 ] && info "$skipped request(s) ⏳ puladas (refresh/logout ainda não implementados no auth); escolha uma delas direto para rodar"
+  [ "$depth" = 0 ] && info "05 (F1–F8) e 07 (checagens) rodam como scripts: escolha a pasta no menu"
+  [ "${p:0:2}" = "[0" ] || [ "$p" = "[]" ] || info "roda antes: 00 · Setup (cria os usuários A e B, o token e descobre o evento do seed)"
+  [ "$(jq --argjson p "$p" "$COLL_JQ_DEFS"' ($p | length) > 0 and (getpath(ipath($p)) | has("request"))' "$COLLECTION")" = true ] &&
+    info "request avulsa: se ela usa algo de uma request anterior da mesma pasta (ex.: o orderId do POST), rode a pasta (opção 0)"
+  case "$label" in "05 ·"*) info "pela collection só os passos HTTP; a falha de infraestrutura é provocada pelos f1…f8 do menu principal" ;; esac
+  section "newman run (delay de 500 ms entre requests: o gateway limita pedidos a 2/s por usuário)"
+  # shellcheck disable=SC2086
+  $nm run "$tmp" -e "$COLLECTION_ENV" --delay-request 500 --color on; rc=$?
+  rm -f "$tmp"
+  [ "$rc" = 0 ] && printf '%s✔ collection passou%s\n' "$G" "$N" || printf '%s✘ collection com falhas (exit %s)%s\n' "$R" "$rc" "$N"
+  return "$rc"
+}
+
+# collection_menu [PREFIX] → browse the collection tree; with PREFIX, run the top folder whose name starts with it
+# shellcheck disable=SC2016  # $p and $i are jq variables
+collection_menu() {
+  local path='[]' c n kids is_folder next top
+  if [ -n "${1:-}" ]; then
+    n=$(jq --arg x "$1" '[.item[].name] | to_entries | map(select(.value | startswith($x))) | .[0].key // empty' "$COLLECTION")
+    [ -n "$n" ] || { echo "nenhuma pasta começa com '$1'" >&2; return 2; }
+    run_collection "[$n]"; return
+  fi
+  while :; do
+    title "Collection Postman: $(jq -r --argjson p "$path" "$COLL_JQ_DEFS"' if ($p | length) == 0 then "raiz" else [foreach $p[] as $i (.; .item[$i]; .name)] | join(" / ") end' "$COLLECTION")"
+    jq -r --argjson p "$path" "$COLL_JQ_DEFS"' (if ($p | length) == 1 then .item[$p[0]].name[0:2] else "" end) as $top
+      | getpath(ipath($p) + ["item"]) | to_entries[]
+      | "  \(.key + 1)) \(.value.name)\(if ($top == "05" or $top == "07") then "  ▶ roda o cenário real"
+          elif .value.item then "  ▸ \(.value.item | length) itens" else "" end)"' "$COLLECTION"
+    printf '\n  0) rodar %s   v) voltar   q) sair\n> ' "$([ "$path" = '[]' ] && echo 'a collection inteira' || echo 'tudo daqui')"
+    read -r c || return 0
+    case "$c" in
+      q) return 0 ;;
+      v) [ "$path" = '[]' ] && return 0; path=$(jq -c '.[:-1]' <<<"$path") ;;
+      0) run_collection "$path" ;;
+      ''|*[!0-9]*) echo "opção inválida" ;;
+      *)
+        kids=$(jq --argjson p "$path" "$COLL_JQ_DEFS"' getpath(ipath($p) + ["item"]) | length' "$COLLECTION")
+        [ "$c" -ge 1 ] && [ "$c" -le "$kids" ] || { echo "opção inválida"; continue; }
+        is_folder=$(jq --argjson p "$path" --argjson i $((c - 1)) "$COLL_JQ_DEFS"' getpath(ipath($p) + ["item", $i]) | has("item")' "$COLLECTION")
+        next=$(jq -c --argjson i $((c - 1)) '. + [$i]' <<<"$path")
+        top=$(jq -r --argjson p "$next" '.item[$p[0]].name[0:2]' "$COLLECTION")
+        # an F folder (05) or a per-service check (07) runs the real scenario instead of opening the folder
+        if [ "$is_folder" = true ] && { [ "$top" = 05 ] || [ "$top" = 07 ]; } && [ "$(jq length <<<"$next")" = 2 ]; then
+          run_collection "$next"
+        elif [ "$is_folder" = true ]; then path="$next"
+        else run_collection "$next"; fi ;;
+    esac
+  done
+}
+
+# live_logs → the asynchronous side as it happens (T2 in the presentation layout): one line per message a
+# service publishes or consumes, plus duplicates, rejections, broker drops and real scaling decisions
+live_logs() {
+  local ev
+  printf '%sfluxo de eventos ao vivo + containers que morrem, congelam ou sobem (Ctrl-C para parar)%s\n' "$D" "$N"
+  # Docker side: a container dying, freezing or starting is the moment the audience must see (F2, F6, F8,
+  # autoscale, surprise). Runs beside the log stream; killed on the way out (it ignores Ctrl-C in background).
+  ( docker events --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME:-ticketpro}" --filter type=container \
+      --filter event=die --filter event=start --filter event=pause --filter event=unpause \
+      --format '{{.Time}}|{{.Action}}|{{.Actor.Attributes.name}}|{{index .Actor.Attributes "exitCode"}}' 2>/dev/null \
+    | while IFS='|' read -r t action name code; do
+        name=${name#"${COMPOSE_PROJECT_NAME:-ticketpro}"-}
+        case "$action" in
+          die) if [ "$code" = 137 ]; then msg="✖ MORREU (kill)"; else msg="■ PAROU (exit $code)"; fi; c=$'\033[1;97;41m' ;;
+          start) msg="▲ SUBIU"; c=$'\033[1;30;42m' ;;
+          pause) msg="⏸ CONGELADO (docker pause)"; c=$'\033[1;30;43m' ;;
+          unpause) msg="▶ DESCONGELADO"; c=$'\033[1;30;42m' ;;
+          *) continue ;;
+        esac
+        [ -t 1 ] || c=""
+        printf '%s %s      %-24s  %s %s\n' "$c" "$(date -u -r "$t" +%H:%M:%S)" "$name" "$msg" "${c:+$N}"
+      done ) &
+  ev=$!
+  trap 'pkill -P "$ev" 2>/dev/null; kill "$ev" 2>/dev/null' EXIT INT TERM HUP
+  # shellcheck disable=SC2086
+  docker compose logs -f --since 1s --no-color $SERVICES autoscaler 2>/dev/null \
+    | grep --line-buffered -E '"message":"(message_published|message_consumed|message_rejected|broker_down|broker_up|scale_decision|stale_event|compensation_applied|late_payment_refund|stock_released)"' \
+    | jq --unbuffered -Rr --arg y "$Y" --arg r "$R" --arg g "$G" --arg d "$D" --arg n "$N" --arg m "$([ -t 1 ] && printf '\033[35m')" '
+        capture("^(?<c>[^ |]+) *\\| (?<j>\\{.*)$")? | .c as $c | (.j | fromjson?) // empty
+        | select(.message != "scale_decision" or .current != .desired)
+        | (.type // "") as $t | ((.version // "") | tostring) as $v
+        | (if .message == "message_published" then [$d, "publicou   \($t) v\($v)"]
+           elif .message == "message_consumed" and .duplicate then [$y, "DUPLICADA  \($t) v\($v): ignorada (processed_messages)"]
+           elif .message == "message_consumed" then ["", "consumiu   \($t) v\($v)"]
+           elif .message == "message_rejected" then [$r, "REJEITADA  \($t) v\($v): \(.reason // .error // "inválida" | tostring | .[0:60])"]
+           elif .message == "broker_down" then [$r, "BROKER FORA: \(.error // "" | tostring | .[0:60])"]
+           elif .message == "broker_up" then [$g, "broker de volta"]
+           elif .message == "scale_decision" then [$y, "ESCALA \(.target): fila \(.depth), réplicas \(.current) → \(.desired)"]
+           elif .message == "stale_event" then [$y, "fora de ordem/atrasado \($t): UPDATE condicional não aplicou"]
+           elif .message == "compensation_applied" then [$m, "COMPENSAÇÃO: pedido cancelado (\(.reason // "?")\(if $t != "" then ", por \($t)" else ", prazo do pagamento estourou" end)) → OrderCancelled"]
+           elif .message == "late_payment_refund" then [$m, "APROVAÇÃO ATRASADA \($t): pedido já cancelado → pede estorno (RefundRequested)"]
+           elif .message == "stock_released" then [$m, "ESTOQUE DEVOLVIDO: reserva liberada por \($t)"]
+           else [$y, .message] end) as $m
+        | "\($m[0])\((.timestamp // "")[11:23])  \($c | .[0:24] | . + (" " * (24 - length)))  \($m[1])\($n)"'
+}
+
 # order_evidence [ORDER_ID] → the order as every service sees it, its log trail and its trace
 order_evidence() {
+  local _TRACE_QUIET=1
   local o="${1:-$(latest_order)}" corr tp
   [ -n "$o" ] || { info "nenhum pedido ainda"; return 0; }
   title "Evidência do pedido $o"
@@ -232,7 +389,10 @@ surprise() {
   token=$(new_user) || { fail "não consegui criar o usuário antes da queda"; return 1; }
   pause
   since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  trace "docker compose kill $svc (todas as réplicas)"
   docker compose kill "$svc" >/dev/null 2>&1 && info "$svc derrubado"
+  banner fail "SERVIÇO DERRUBADO: $svc (todas as réplicas, docker compose kill)" "previsão: $(surprise_prediction "$svc")"
+  trace_replicas "$svc"
   http POST /orders "{\"eventId\":\"$EVENT\",\"sectorId\":\"$SECTOR\",\"quantity\":1}" "$token" -H "Idempotency-Key: $(id)" --max-time 5
   info "POST /orders durante a queda → HTTP ${STATUS:-000}"
   [ "$STATUS" = 202 ] && order=$(echo "$BODY" | jq -r .orderId)
@@ -240,12 +400,19 @@ surprise() {
     [ -n "$order" ] && info "pedido $order: $(sql orders "SELECT status || coalesce('(' || cancel_reason || ')', '') FROM orders WHERE id = '$order'" 2>/dev/null || echo '?')"
     sleep 2
   done
+  trace "docker compose up -d $svc"
   docker compose up -d --no-deps "$svc" >/dev/null 2>&1 && info "$svc de volta, esperando ficar healthy"
   scripts/wait-healthy.sh 180 >/dev/null || fail "a stack não voltou healthy"
+  banner ok "$svc DE VOLTA E HEALTHY" "ficou fora ~${secs}s; ninguém mexeu nas filas nem nos bancos"
+  trace_replicas "$svc"
   if [ -z "$order" ]; then
     order=$(place_order "$token" "$EVENT" "$SECTOR" 1) && info "pedido feito depois da volta: $order"
   fi
-  [ -n "$order" ] && info "estado final: $(final_state "$token" "$order" 60)"
+  if [ -n "$order" ]; then
+    local final; final=$(final_state "$token" "$order" 60)
+    info "estado final: $final"
+    banner ok "DESFECHO DO PEDIDO $order: $final" "evidência nos bancos e nos logs logo abaixo"
+  fi
   [ -n "$order" ] && order_evidence "$order"
   section "logs do $svc desde a queda"
   logs_for "$since" "$svc" | tail -10
@@ -274,13 +441,14 @@ menu() {
   o) evidência do último pedido  f3) mensagem duplicada (R1) f7) resposta tardia (R5)
   s) falha surpresa              f4) mensagem venenosa      f8) escala horizontal (R4)
   g) gateway (revogação, 429)    v) versionamento   a) autoscale   p) payment   n) notification
+  c) collection Postman (pastas e requests, via Newman)
   q) sair
 EOF
     printf '> '; read -r c || return 0
     case "$c" in
       0) scenario happy ;; r) scenario replicas ;; o) order_evidence ;;
       f[1-8]) scenario "$c" ;; g) scenario gateway ;; v) scenario versioning ;; a) scenario autoscale ;;
-      p) scenario payment ;; n) scenario notification ;;
+      p) scenario payment ;; n) scenario notification ;; c) collection_menu ;;
       s) printf 'serviço (%s, ministack, <db>): ' "$SERVICES"; read -r svc; printf 'segundos fora [10]: '; read -r sec
          surprise "$svc" "${sec:-10}" ;;
       q) return 0 ;;
@@ -293,6 +461,8 @@ case "${1:-menu}" in
   menu) menu ;;
   all) all ;;
   order) order_evidence "${2:-}" ;;
+  logs) live_logs ;;
+  collection) collection_menu "${2:-}" ;;
   surprise) [ -n "${2:-}" ] || { echo "usage: scripts/demo.sh surprise SERVICE [SECONDS]" >&2; exit 2; }; surprise "$2" "${3:-10}" ;;
   *) scenario "$1" ;;
 esac

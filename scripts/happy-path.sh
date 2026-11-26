@@ -8,6 +8,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/aws.sh
 load_env
+. scripts/lib/trace.sh
 
 BASE="${1:-http://localhost:8080}"
 failures=0
@@ -26,6 +27,7 @@ request() {
     ${TOKEN:+-H "Authorization: Bearer $TOKEN"} ${body:+-d "$body"} "$@")"
   STATUS="${out##*$'\n'}"
   BODY="${out%$'\n'*}"
+  [ -n "${QUIET_REQUEST:-}" ] || trace_http "$method" "$path" "$body" "$STATUS" "$BODY"
 }
 
 # 1. register
@@ -52,14 +54,16 @@ ORDER_ID=""
 KEY=""
 for attempt in 1 2 3 4 5; do
   KEY="$(uuid)"
-  request POST /orders "{\"eventId\":\"$EVENT_ID\",\"sectorId\":\"$SECTOR_ID\",\"quantity\":2}" -H "Idempotency-Key: $KEY" -D /dev/stderr 2>/tmp/happy-headers.$$
+  QUIET_REQUEST=1 request POST /orders "{\"eventId\":\"$EVENT_ID\",\"sectorId\":\"$SECTOR_ID\",\"quantity\":2}" -H "Idempotency-Key: $KEY" -D /dev/stderr 2>/tmp/happy-headers.$$
   LOCATION="$(grep -i '^location:' /tmp/happy-headers.$$ | tr -d '\r' | awk '{print $2}')"
+  trace_http POST /orders "{\"eventId\":\"$EVENT_ID\",\"sectorId\":\"$SECTOR_ID\",\"quantity\":2}" "$STATUS" "$BODY" "Location: ${LOCATION:-none}"
   rm -f /tmp/happy-headers.$$
   ORDER_ID="$(echo "$BODY" | jq -r '.orderId // empty')"
   if [ "$STATUS" != 202 ] || [ "$LOCATION" != "/orders/$ORDER_ID" ]; then
     die "POST /orders → $STATUS (Location: ${LOCATION:-none}) $BODY"
   fi
   pass "POST /orders → 202 + Location (attempt $attempt)"
+  banner info "202 ACCEPTED: pedido $ORDER_ID criado" "resposta imediata; reserva, pagamento e emissão seguem por eventos (acompanhe no T2)"
 
   final=""
   for _ in $(seq 1 60); do
@@ -69,7 +73,7 @@ for attempt in 1 2 3 4 5; do
     sleep 0.5
   done
   case "$final" in
-    CONFIRMED*) pass "order $ORDER_ID → CONFIRMED"; break ;;
+    CONFIRMED*) pass "order $ORDER_ID → CONFIRMED"; banner ok "PEDIDO CONFIRMADO: $ORDER_ID" "PENDING → AWAITING_PAYMENT → CONFIRMED, consultado por GET /orders/{id}"; break ;;
     "CANCELLED PAYMENT_FAILED") echo "info  order $ORDER_ID → CANCELLED(PAYMENT_FAILED), retrying"; ORDER_ID="" ;;
     *) die "order $ORDER_ID did not reach a final state in 30s (last: $BODY)" ;;
   esac

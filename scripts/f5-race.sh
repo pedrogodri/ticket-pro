@@ -16,10 +16,15 @@ sql inventory "UPDATE reservations SET status = 'RELEASED' WHERE sector_id = '$F
 info "F5 sector refilled to $(sql inventory "SELECT available FROM sectors WHERE id = '$F5_SECTOR'") units"
 
 TOKENS=()
+trace "criando $USERS usuários (POST /auth/register + /auth/login cada)"
+_TRACE_QUIET=1
 for _ in $(seq 1 $USERS); do t=$(new_user) || die "could not create users"; TOKENS+=("$t"); done
+unset _TRACE_QUIET
 info "$USERS users ready"
 
 out=$(mktemp)
+banner info "$((USERS * PER_USER)) PEDIDOS AO MESMO TEMPO → $(sql inventory "SELECT available FROM sectors WHERE id = '$F5_SECTOR'") INGRESSOS" "$USERS usuários × $PER_USER pedidos, todos no setor F5"
+trace "disparando $((USERS * PER_USER)) POST /orders AO MESMO TEMPO ($PER_USER por usuário) no setor F5, que tem 10 unidades"
 for t in "${TOKENS[@]}"; do
   for _ in $(seq 1 $PER_USER); do
     ( curl -s -X POST "$BASE/orders" -H 'content-type: application/json' -H "Authorization: Bearer $t" \
@@ -39,6 +44,9 @@ done
 oos=$(sql orders "SELECT count(*) FROM orders WHERE id IN ($list) AND cancel_reason = 'OUT_OF_STOCK'")
 through=$(sql orders "SELECT count(*) FROM orders WHERE id IN ($list) AND status = 'CONFIRMED'")
 left=$(sql inventory "SELECT available FROM sectors WHERE id = '$F5_SECTOR'")
+if [ "$through" = 10 ] && [ "$oos" = 90 ] && [ "$left" = 0 ]; then kind=ok; else kind=fail; fi
+banner "$kind" "ZERO VENDA DUPLA: $through CONFIRMED · $oos OUT_OF_STOCK · estoque $left" \
+  "decidido no banco: UPDATE sectors ... WHERE available >= q + CHECK (available >= 0)"
 [ "$through" = 10 ] && pass "10 orders CONFIRMED" || fail "$through orders CONFIRMED (want 10)"
 [ "$oos" = 90 ] && pass "90 orders CANCELLED(OUT_OF_STOCK)" || fail "$oos orders OUT_OF_STOCK (want 90)"
 [ "$left" = 0 ] && pass "available = 0, never negative" || fail "available = $left"

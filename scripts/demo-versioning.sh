@@ -7,6 +7,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 . scripts/lib/aws.sh
 load_env
+. scripts/lib/trace.sh
 
 failures=0
 pass() { echo "ok    $1"; }
@@ -34,6 +35,7 @@ publish() {
   local env
   env=$(jq -cn --arg m "$(id)" --arg c "$(id)" --arg t "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" --argjson v "$1" --argjson p "$payload" \
     '{messageId:$m, correlationId:$c, type:"OrderCreated", version:$v, occurredAt:$t, payload:$p}')
+  trace "SNS publish → ticketpro-orders: OrderCreated v$1 (orderId $2${3:+, channel $3})"
   awsl sns publish --topic-arn "$TOPIC" --message "$env" \
     --message-attributes "{\"type\":{\"DataType\":\"String\",\"StringValue\":\"OrderCreated\"},\"version\":{\"DataType\":\"String\",\"StringValue\":\"$1\"}}" >/dev/null
 }
@@ -53,10 +55,12 @@ V1=$(id); V2=$(id); V3=$(id)
 
 publish 1 "$V1"
 c=$(wait_channel "$V1")
+banner ok "v1 PROCESSADA: convertida pelo upcaster (channel = ${c:-?})" "a v1 não tem channel; o consumidor preenche API e segue"
 [ "$c" = API ] && pass "v1 processed, upcast to channel API" || fail "v1: reservation channel '${c:-none}'"
 
 publish 2 "$V2" WEB
 c=$(wait_channel "$V2")
+banner ok "v2 PROCESSADA: channel = ${c:-?}" "v1 e v2 convivem na mesma fila sem quebrar o consumidor"
 [ "$c" = WEB ] && pass "v2 processed with channel WEB" || fail "v2: reservation channel '${c:-none}'"
 
 publish 3 "$V3" MOBILE
@@ -65,6 +69,7 @@ for _ in $(seq 1 60); do
   in_dlq "$V3" && { moved=yes; break; }
   sleep 0.5
 done
+banner info "v3 DESCONHECIDA → DLQ" "o inventory não sabe ler a v3: rejeita, manda para a DLQ e continua de pé"
 [ -n "$moved" ] && pass "v3 rejected as poison → ticketpro-inventory-service-dlq" || fail "v3 did not reach the DLQ in 30s"
 [ -z "$(sql "SELECT 1 FROM reservations WHERE order_id = '$V3'")" ] && pass "v3 had no effect (no reservation)" || fail "v3 created a reservation"
 

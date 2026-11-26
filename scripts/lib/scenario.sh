@@ -4,6 +4,7 @@
 # and to inject messages.
 
 BASE="${BASE:-http://localhost:8080}"
+. "$(dirname "${BASH_SOURCE[0]}")/trace.sh"
 failures=0
 pass() { echo "ok    $1"; }
 fail() { echo "FAIL  $1"; failures=$((failures + 1)); }
@@ -24,8 +25,11 @@ db_host() {
 
 # sql DB QUERY → rows (|-separated, no header). DB is the service database name: orders, inventory...
 sql() {
-  local host; host="$(db_host "$1")" || return 1
-  docker compose exec -T "$host" psql -U "${1}_owner" -d "$1" -tAc "$2"
+  local host out rc; host="$(db_host "$1")" || return 1
+  out="$(docker compose exec -T "$host" psql -U "${1}_owner" -d "$1" -tAc "$2")"; rc=$?
+  trace_once "$host: $(clip "$2" 75) ⇒ $(clip "${out:-(vazio)}" 45)"
+  [ -n "$out" ] && printf '%s\n' "$out"
+  return "$rc"
 }
 
 # table DB QUERY → the rows as a psql table with header, for showing on screen.
@@ -46,9 +50,11 @@ http() {
     BODY="${out%$'\n'*}"
     [ "$STATUS" = 429 ] || break
     wait="$(grep -i '^retry-after:' /tmp/scenario-h.$$ | tr -dc '0-9')"
+    trace_http "$method" "$path" "$body" 429 "" "rate limit do gateway: aguardando Retry-After ${wait:-1}s"
     sleep "${wait:-1}"
   done
   rm -f /tmp/scenario-h.$$
+  trace_http "$method" "$path" "$body" "$STATUS" "$BODY"
 }
 
 # new_user → prints an access token for a freshly registered user.
@@ -87,6 +93,7 @@ available() {
 
 # publish TOPIC_NAME TYPE VERSION ENVELOPE_JSON → SNS publish with the outbox message attributes
 publish() {
+  trace "SNS publish → $1: $2 v$3 (messageId $(echo "$4" | jq -r '.messageId // "?"'))"
   awsl sns publish --topic-arn "arn:aws:sns:${AWS_REGION:-us-east-1}:000000000000:$1" --message "$4" \
     --message-attributes "{\"type\":{\"DataType\":\"String\",\"StringValue\":\"$2\"},\"version\":{\"DataType\":\"String\",\"StringValue\":\"$3\"}}" >/dev/null
 }
@@ -99,8 +106,14 @@ envelope() {
 
 # set_payment VAR=VALUE... → recreate the payment replicas with overridden env (keeps 2 replicas)
 set_payment() {
+  trace "docker compose up payment-service ${*:-(env padrão do compose)}: recriando as réplicas"
   env "$@" docker compose up -d --no-deps payment-service >/dev/null 2>&1
   scripts/wait-healthy.sh 120 >/dev/null || return 1
+  # The old replicas' SQS long polls stay open in MiniStack for up to SQS_WAIT_TIME_S after they die: a
+  # message arriving then goes to a dead poll and hides for the visibility timeout (30 s > the 15 s order
+  # deadline). Let those polls expire before the next purchase.
+  trace "payment-service healthy; aguardando ${SQS_WAIT_TIME_S:-10}s para os long polls das réplicas antigas expirarem"
+  sleep "${SQS_WAIT_TIME_S:-10}"
 }
 
 EVENT=0193a6f0-3333-7000-8000-000000000003   # seeded "Festival de Verão 2026"

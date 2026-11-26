@@ -28,7 +28,8 @@ Para cada item, ele mostra **como a falha é provocada e o resultado esperado**,
 
 | Comando | Uso |
 |---|---|
-| `scripts/demo.sh` | menu interativo: digite `0`, `f1`…`f8`, `r`, `g`, `v`, `a`, `p`, `n`, `o`, `s` |
+| `scripts/demo.sh` | menu interativo: digite `0`, `f1`…`f8`, `r`, `g`, `v`, `a`, `p`, `n`, `o`, `s`, `c` (collection Postman) |
+| `scripts/demo.sh collection [03]` | collection Postman via Newman: navega pastas e requests (ou roda direto a pasta que começa com o prefixo), sempre com o Setup antes. Requer `npm install -g newman@6` |
 | `scripts/demo.sh f5` | roda um item direto (`happy`, `replicas`, `f1`…`f8`, `gateway`, `versioning`, `autoscale`, `payment`, `notification`) |
 | `scripts/demo.sh order [ORDER_ID]` | um pedido em todos os bancos, com os logs e o link do Jaeger (padrão: o último pedido) |
 | `scripts/demo.sh surprise inventory-service` | falha surpresa: derruba o serviço, compra durante a queda, sobe de novo e mostra o desfecho |
@@ -57,6 +58,10 @@ Todos terminam com `<nome>: 0 failed` e exit 0 quando passam, e devolvem a stack
 | Notification isolado (comprovante no S3) | `scripts/notification-check.sh` |
 | Versionamento de evento (v1, v2, v3 → DLQ) | `scripts/demo-versioning.sh` |
 | Autoescala pela fila | `scripts/demo-autoscale.sh` |
+| Layout da apresentação no Terminal do Mac (T1 demo, T2 eventos ao vivo, T3 filas) + navegador | `scripts/demo-terminals.sh --browser` |
+| Fluxo de eventos ao vivo (publicado, consumido, duplicada, rejeitada, broker, escala) | `scripts/demo.sh logs` |
+| Ferramentas visuais: pgAdmin (bancos), RedisInsight (Redis do gateway) e SQS Admin (só DLQs) | `scripts/tools.sh up \| down \| urls` |
+| Filas SNS/SQS: profundidade, assinaturas, rastro de um pedido, ao vivo | `scripts/queues.sh [subs \| trail [orderId] \| watch]` |
 
 Os oito cenários de falha de uma vez:
 

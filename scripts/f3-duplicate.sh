@@ -10,6 +10,7 @@ ORDER=$(id); MESSAGE=$(id)
 ENV=$(envelope OrderCreated 1 "$(jq -cn --arg o "$ORDER" --arg u "$(id)" --arg e "$EVENT" --arg s "$SECTOR" \
   '{orderId:$o, userId:$u, eventId:$e, sectorId:$s, quantity:1}')" "$MESSAGE")
 since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+banner info "MESMA MENSAGEM PUBLICADA 5 VEZES" "messageId $MESSAGE: o broker entrega pelo menos uma vez, então duplicata acontece"
 for i in 1 2 3 4 5; do publish ticketpro-orders OrderCreated 1 "$ENV"; done
 info "published messageId $MESSAGE 5 times"
 
@@ -19,6 +20,7 @@ for _ in $(seq 1 40); do
 done
 n=$(sql inventory "SELECT count(*) FROM reservations WHERE order_id = '$ORDER'")
 p=$(sql inventory "SELECT count(*) FROM processed_messages WHERE message_id = '$MESSAGE'")
+banner ok "EFEITO ÚNICO: $n reserva e $p linha em processed_messages" "$dups entregas ignoradas como duplicadas (duplicate=true no log)"
 [ "$n" = 1 ] && pass "1 reservation for the order (5 deliveries)" || fail "$n reservations"
 [ "$p" = 1 ] && pass "1 processed_messages row" || fail "$p processed_messages rows"
 [ "$dups" -ge 4 ] && pass "$dups deliveries logged duplicate=true" || fail "$dups duplicate logs (want 4)"

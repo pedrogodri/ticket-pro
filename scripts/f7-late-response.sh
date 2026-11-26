@@ -17,10 +17,12 @@ set_payment PAYMENT_LATENCY_MS=$LATENCY_MS PAYMENT_PROVIDER_TIMEOUT_MS=$((LATENC
   PAYMENT_WORKER_LEASE_MS=$((LATENCY_MS + 20000)) PAYMENT_FAILURE_RATE=0 \
   || die "payment did not come back"
 info "payment latency ${LATENCY_MS}ms > order deadline ${TIMEOUT_MS}ms"
+banner fail "PAGAMENTO LENTO: ${LATENCY_MS}ms > prazo do pedido ${TIMEOUT_MS}ms" "o provedor vai aprovar, mas tarde demais"
 
 TOKEN=$(new_user) || die "could not create a user"
 ORDER=$(place_order "$TOKEN" "$EVENT" "$SECTOR" 1) || die "order not accepted"
 state=$(final_state "$TOKEN" "$ORDER" $(( TIMEOUT_MS / 1000 + 10 )))
+banner comp "PRAZO ESTOUROU → $state" "o order cancelou no prazo e o inventory devolveu o estoque; o pagamento ainda está em andamento"
 [ "$state" = "CANCELLED PAYMENT_TIMEOUT" ] && pass "order cancelled at the deadline: CANCELLED(PAYMENT_TIMEOUT)" \
   || fail "order is '$state' after the deadline (needs the order's deadline scanner)"
 
@@ -31,5 +33,7 @@ for _ in $(seq 1 30); do
 done
 [ "${refund:-0}" -ge 1 ] && pass "late PaymentApproved → RefundRequested" || fail "no RefundRequested for the late approval (order refund flow missing)"
 refunded=$(sql payments "SELECT count(*) FROM outbox WHERE type = 'PaymentRefunded' AND payload->>'orderId' = '$ORDER'" 2>/dev/null)
+banner comp "APROVAÇÃO ATRASADA CHEGOU → ESTORNO" "PaymentApproved depois do cancelamento: o pedido continua CANCELLED" \
+  "RefundRequested: ${refund:-0} · PaymentRefunded: ${refunded:-0}"
 [ "${refunded:-0}" -ge 1 ] && pass "PaymentRefunded published" || fail "no PaymentRefunded (payment refund handler missing)"
 finish

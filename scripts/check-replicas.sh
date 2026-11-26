@@ -5,13 +5,16 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 runs="${1:-3}"
+. scripts/lib/trace.sh
 failures=0
 
 for _ in $(seq 1 "$runs"); do
   scripts/happy-path.sh >/dev/null || { echo "FAIL  happy-path run failed"; exit 1; }
 done
 
+banner info "R4: CONSUMIDORES CONCORRENTES" "order, inventory e payment com 2 réplicas cada na MESMA fila SQS; cada réplica tem que ter consumido"
 for svc in order-service inventory-service payment-service; do
+  trace_replicas "$svc"
   ids="$(docker compose ps -q "$svc")"
   n="$(echo "$ids" | grep -c . || true)"
   [ "$n" -ge 2 ] || { echo "FAIL  $svc has $n replica(s), expected >= 2"; failures=$((failures + 1)); continue; }
